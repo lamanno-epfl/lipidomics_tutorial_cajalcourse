@@ -1,28 +1,48 @@
-# INSTRUCTOR / DEV ONLY. uMAIA pins an older jax+numpyro that conflicts with EUCLID,
-# so the normalization fit is run here, once, in isolation. Students never install this:
-# they receive the fitted parameters + normalized data and unroll the histogram-matching
-# transform in pure numpy/scipy (notebook 3), which needs none of this.
+# Dedicated environment for the uMAIA normalization step (notebook 3). Students DO install
+# and run it. uMAIA targets an older stack (numpy<2, jax 0.4.x), so it gets its own env; the
+# notebook-3 kernel is "cajal-umaia". CPU only: set JAX_PLATFORMS=cpu (the IFB cluster has no
+# GPU, and this avoids a CUDA/ptxas lookup). Verified end-to-end on the two course sections.
 #
-#     mamba env create -f environment-umaia.yml
-#     mamba activate cajal-umaia
-#     git clone https://github.com/lamanno-epfl/uMAIA.git
-#     pip install -e uMAIA
+#   mamba env create -f environment-umaia.yml
+#   mamba activate cajal-umaia
+#   pip install more_itertools natsort makefun multipledispatch opt_einsum xmltodict \
+#               pymzml pyimzML funsor "opencv-python-headless<4.10" "scikit-image==0.22.0"
+#   git clone https://github.com/lamanno-epfl/uMAIA.git && pip install -e uMAIA --no-deps
+#   python -m ipykernel install --user --name cajal-umaia --display-name "cajal-umaia"
+#   export JAX_PLATFORMS=cpu      # before running notebook 3
+#
+# A pinned freeze of a known-good env is shipped at data/refs/requirements-umaia-freeze.txt.
 name: cajal-umaia
 channels:
   - conda-forge
 dependencies:
   - python=3.11
   - pip
+  - ipykernel
+  - "numpy<2"
+  - "scipy<1.13"
+  - "pandas<2.2"
+  - scikit-learn
+  - "scikit-image<0.23"
+  - "jax>=0.4.20,<0.4.27"
+  - "jaxlib>=0.4.20,<0.4.27"
+  - "numpyro>=0.13,<0.16"
+  - optax
+  - numba
+  - "zarr<2.17"
+  - "numcodecs<0.13"
+  - anndata
+  - matplotlib
+  - tqdm
+  - h5py
   - pip:
-      - jax==0.4.14
-      - jaxlib==0.4.14
-      - numpyro==0.12.1
-      - optax==0.1.7
-      - numpy
-      - pandas
-      - scipy
-      - scikit-learn
-      - zarr==2.14.2
-      - anndata
-      - tqdm
-      - matplotlib
+      - more_itertools
+      - natsort
+      - makefun
+      - multipledispatch
+      - opt_einsum
+      - xmltodict
+      - pymzml
+      - pyimzML
+      - funsor
+      - "opencv-python-headless<4.10"
