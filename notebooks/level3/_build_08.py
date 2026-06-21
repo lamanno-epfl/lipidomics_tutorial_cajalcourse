@@ -48,9 +48,19 @@ were registered into the same Allen Common Coordinate Framework, so both speak i
 regions. That shared map is the entire bridge. We will line the two matrices up region by region, and
 then ask a machine learning model to learn, from gene expression alone, where each lipid changes.
 
+We will meet that bridge at **two granularities of the same gene<->lipid question**. First, fine: for
+*every MSI pixel* we borrow the genes and the cell type of the MERFISH *cells* that sit in the same
+little 3D ball, built transparently with a KD-tree. Second, coarse: for *every Allen region* we join
+the region-averaged transcriptome to the region's lipid change and let a model rank the gene programs.
+The per-pixel view shows you the integration physically, pixel by pixel, and lets us ask which lipid
+territories are also cell-type territories. The per-region view trades that resolution for statistics:
+one clean number per region per gene, predictable by a tree. Same bridge, two zoom levels.
+
 Here is the road:
 
-> **integration by shared Allen coordinates → the per-region lipid-change matrix and the region x gene
+> **integration by shared Allen coordinates → per-pixel: KD-tree ball query borrows MERFISH genes and
+> cell type for each MSI pixel, a gene map beside a lipid map, a cell-type territory map, and the
+> lipizone x cell-type reciprocal enrichment → per-region: the lipid-change matrix and the region x gene
 > matrix, joined → gradient-boosted trees (XGBoost), explained from scratch → NMF gene programs as the
 > features → one regressor per lipid, scored by test Pearson r → SHAP, which gene program drives each
 > prediction → the leading genes of the top program, and what they are → gene ontology of those genes →
@@ -58,7 +68,7 @@ Here is the road:
 
 Every number and every figure below comes from code that ran on the two real sections, `217D`
 (control) and `Brain1_C2` (pregnant), the same coronal plane at about AP 6.5, joined to the real Allen
-MERFISH region averages. Nothing is invented.""")
+MERFISH cells and the real Allen MERFISH region averages. Nothing is invented.""")
 
 # ----------------------------------------------------------------------------
 md(r"""## the callouts
@@ -129,12 +139,25 @@ anatomical regions, giving one number per gene per region.
 
 There is **no pixel-to-cell correspondence** anywhere in this. A MALDI pixel was never matched to a
 MERFISH cell, because they live in different brains. What saves us is registration. Both datasets were
-warped into the **Allen Common Coordinate Framework**, the standard 3D mouse-brain atlas, and the atlas
-carves the brain into named regions. So a MALDI pixel knows which Allen region it sits in, and a
-MERFISH cell knows which Allen region it sits in, and *the region is the shared key*. We do not
-integrate pixel to cell. We integrate region to region.
+warped into the **Allen Common Coordinate Framework**, the standard 3D mouse-brain atlas. The atlas
+gives both modalities the *same 3D coordinates*, in millimetre-scale CCF units. A MALDI pixel has an
+`(xccf, yccf, zccf)`, and so does every MERFISH cell, so the shared key can be as fine as physical
+proximity in space or as coarse as the named region a coordinate falls in. That single fact buys us two
+granularities, and we use both in this notebook.
 
-The move, in one line:
+**Per-pixel (fine).** For each MALDI pixel we look up the MERFISH cells whose coordinates sit within a
+small ball around it, and borrow them: average their gene counts, and take the majority cell type. This
+hands every pixel an imputed gene-expression vector and a putative cell type, so we can lay a MERFISH
+gene map beside a lipid map on the same tissue, and ask which lipid territories are also cell-type
+territories. The cost is coverage: a pixel only gets borrowed genes where a MERFISH section actually
+overlaps it, so not every pixel is matched.
+
+**Per-region (coarse).** We collapse both modalities to the named Allen region: the per-region lipid
+*change* upon pregnancy, and the region-averaged transcriptome. One number per region per gene, one per
+region per lipid, joined on the region index. We lose the within-region detail but gain a clean, stable
+table a model can learn from. This is the half that runs XGBoost, SHAP, and gene ontology.
+
+The coarse move, in one line:
 
 ```
 per-region lipid change   (region x lipid)        from MALDI, control vs pregnant
@@ -169,7 +192,286 @@ Harmony's whole job is to make the two conditions overlap, so testing a conditio
 Harmonized data would erase the very effect we want.""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 2 · build the per-region lipid-change matrix
+md(r"""## 2 · per-pixel integration: borrow genes from the nearest MERFISH cells
+
+Before we collapse anything to regions, let us do the integration the *fine* way and watch it happen
+pixel by pixel. The recipe is the heart of "integration by shared coordinates", and it is far simpler
+than it sounds once you see it unrolled.
+
+We have two point clouds in the **same 3D Allen coordinate space**: our MALDI pixels at `(xccf, yccf,
+zccf)`, and the Allen MERFISH cells at `(x_ccf, y_ccf, z_ccf)` (the underscore is the only naming
+difference; the units are identical). For each MALDI pixel we ask a geometric question: *which MERFISH
+cells sit within a small ball around me?* Take those neighbouring cells, average their 500 measured
+gene counts, and take the majority vote of their cell type. That gives each pixel an imputed gene
+vector and a putative cell type, borrowed from the transcriptome that happens to overlap it in space.
+
+The only piece of machinery is a **cKDTree**, a binary space-partitioning tree from `scipy.spatial`. You
+feed it the 3D coordinates of all the MERFISH cells once; it organises them so that a "give me every
+point within radius r of this query point" lookup costs about `O(log N)` instead of scanning all cells.
+That single trick, the ball query, is what makes matching ~175,000 pixels against hundreds of thousands
+of cells feasible. Everything else is averaging and voting.
+
+🔬 **TASK.** Load the per-cell MERFISH for this plane. The helper reads only the cells inside our AP
+(`x_ccf`) window with a small buffer, keeps the 3D coordinates, the Allen cell-type columns
+(`division`/`class`/`subclass`/`supertype`), and the 500 measured-gene columns (Ensembl transcript IDs
+like `ENSMUST...`), and drops the vascular and immune cells we never want to match to.""")
+
+code(r"""# the per-cell MERFISH: one row per Allen MERFISH cell, in the SAME CCF coordinate space
+from cajal_lipidomics import multimodal as M
+
+# the AP window: our MSI sections' x_ccf span, with a small buffer so we don't clip edge cells
+ap = (float(adata.obs.xccf.min()) - 0.1, float(adata.obs.xccf.max()) + 0.1)
+print(f"AP (x_ccf) window for the MSI plane: {ap[0]:.2f} .. {ap[1]:.2f}")
+
+# the plane subset ships in the course bundle; fall back to the full (symlinked) cell table if absent
+import os
+plane = "/home/fusar/lipidomics_tutorial_cajalcourse/data/merfish_plane.parquet"
+full = "/home/fusar/lipidomics_tutorial_cajalcourse/cell_filtered_w500genes.parquet"
+merfish_path = plane if os.path.exists(plane) else full
+print("loading per-cell MERFISH from:", os.path.basename(merfish_path))
+
+cells, gene_cols = M.load_merfish_cells(merfish_path, ap)
+print("MERFISH cells x columns:", cells.shape, "| measured genes:", len(gene_cols))
+print("cell-type subclasses present:", cells["subclass"].nunique())
+print("coordinate ranges agree? cells z_ccf",
+      f"[{cells.z_ccf.min():.2f}, {cells.z_ccf.max():.2f}]  pixels zccf",
+      f"[{adata.obs.zccf.min():.2f}, {adata.obs.zccf.max():.2f}]")""")
+
+md(r"""⚠️ **CHECKPOINT.** You loaded a few hundred thousand MERFISH cells with 500 gene columns, and the
+cells' `z_ccf`/`y_ccf` ranges overlap the pixels' `zccf`/`yccf` ranges. That overlap is the whole
+prerequisite: if the two clouds did not share space, no ball would ever contain a cell.
+
+🔬 **TASK.** Now unroll the matching for ONE pixel, by hand, so the helper is no black box. We build a
+KD-tree on the cell coordinates, pick a single pixel, query every cell within ~75 um (radius 0.075 in
+CCF units, since 1 CCF unit is about 1 mm), and average their genes and vote their cell type.""")
+
+code(r"""# unroll the cKDTree ball query for ONE pixel
+from scipy.spatial import cKDTree
+
+cell_xyz = cells[["x_ccf", "y_ccf", "z_ccf"]].to_numpy()   # the MERFISH point cloud
+tree = cKDTree(cell_xyz)                                    # build the tree once
+
+# pick one MSI pixel and ask: which cells sit within ~75 um of it in 3D?
+pix = 1000
+q = adata.obs[["xccf", "yccf", "zccf"]].to_numpy()[pix]
+nbrs = tree.query_ball_point(q, r=0.075)                    # indices of cells inside the ball
+print(f"pixel {pix} at CCF {np.round(q, 2)} has {len(nbrs)} MERFISH cells within 75 um")
+
+if nbrs:
+    G = cells[gene_cols].to_numpy(np.float32)
+    borrowed_genes = G[nbrs].mean(0)                        # average their 500 genes
+    ct = cells["subclass"].astype(str).to_numpy()
+    vals, counts = np.unique(ct[nbrs], return_counts=True)
+    majority = vals[counts.argmax()]                        # majority-vote the cell type
+    print("borrowed gene vector length:", borrowed_genes.shape[0])
+    print("majority cell-type subclass in the ball:", majority)""")
+
+md(r"""💡 **HINT.** That is the entire algorithm: one tree, one ball query per pixel, an average and a
+vote. The helper `cl.multimodal.match_pixels_to_cells` does exactly this for *every* pixel at once,
+returning a pixel x gene DataFrame (NaN where no cell was in the ball) and a per-pixel cell-type Series.
+We run it at **radius 0.1** (about 100 um) rather than 0.075, and the next checkpoint explains the
+honest reason why.
+
+🔬 **TASK.** Match all pixels. This is a few seconds: one KD-tree, one vectorised ball query.""")
+
+code(r"""# the helper does the unrolled match for EVERY pixel: average genes + majority-vote cell type
+# first, the honest coverage at the paper's 75 um radius...
+gdf75, _ = M.match_pixels_to_cells(adata.obs, cells, gene_cols, radius=0.075)
+cov75 = float(gdf75.notna().any(axis=1).mean())
+
+# ...then the radius we actually use, 100 um, for fuller coverage
+gdf, celltype = M.match_pixels_to_cells(adata.obs, cells, gene_cols, radius=0.1)
+cov = float(gdf.notna().any(axis=1).mean())
+
+print(f"pixels matched at 75 um (r=0.075): {cov75:6.1%}")
+print(f"pixels matched at 100 um (r=0.10): {cov:6.1%}")
+print("per-pixel gene matrix:", gdf.shape, "| cell types assigned:", celltype.notna().sum())""")
+
+md(r"""⚠️ **CHECKPOINT.** Be honest about the coverage. At the paper's 75 um radius only about **60% of
+pixels match**; at 100 um it rises to roughly **77%**. The shortfall is not a bug, it is geometry: our
+MALDI plane is a thin continuous sheet, while the Allen MERFISH brain is a stack of *discrete* coronal
+sections with gaps between them. Wherever our plane falls between two MERFISH sections, no cell sits
+close enough in the third dimension and the pixel goes unmatched. Widening the ball to 100 um reaches
+into the nearest neighbouring sections and recovers more pixels, at the mild cost of averaging cells a
+little farther away. We use 0.1 for the maps below so the territories are fuller and easier to read.
+
+❓ **QUESTION.** We just widened the radius from 75 to 100 um to lift coverage from 60% to 77%. What is
+the trade-off we accepted? (Hint: a bigger ball borrows from cells farther away, which can blur a sharp
+anatomical border, exactly the contamination the region-constrained version of this match guards
+against.)""")
+
+md(r"""## 2.1 · a MERFISH gene map beside a lipid map
+
+The cleanest sanity check on the whole match is visual. If we borrowed genes correctly, then a **myelin
+gene** should light up the **white matter**, the very same place a **myelin lipid** lights up. We put
+them side by side. For the gene we use `ENSMUST00000102665`, which is the transcript of **`Mog`**,
+myelin oligodendrocyte glycoprotein, a textbook oligodendrocyte/myelin marker, and the exact gene the
+Lipid Brain Atlas paper overlaid on `HexCer 42:2` to validate section quality. For the lipid we use
+`HexCer 42:2;O2`, the myelin sphingolipid that is the spine of this whole notebook.
+
+🔬 **TASK.** Paint the borrowed `Mog` transcript and the measured `HexCer 42:2;O2` lipid on the same
+sections, only on the matched pixels.""")
+
+code(r"""# a borrowed MERFISH myelin gene next to a measured myelin lipid, on matched pixels
+MYELIN_GENE = "ENSMUST00000102665"     # transcript of Mog (myelin oligodendrocyte glycoprotein)
+MYELIN_LIPID = "HexCer 42:2;O2"        # the myelin sphingolipid of this notebook
+
+obs = adata.obs
+gene_vec = gdf[MYELIN_GENE].to_numpy()                 # borrowed per-pixel gene (NaN where unmatched)
+lipid_vec = np.asarray(adata[:, MYELIN_LIPID].X).ravel()
+matched = ~np.isnan(gene_vec)
+
+secs = sorted(obs["SectionID"].unique())
+fig, axes = plt.subplots(2, len(secs), figsize=(4.2 * len(secs), 7.2),
+                         constrained_layout=True)
+z, y = obs["zccf"].to_numpy(), -obs["yccf"].to_numpy()
+for col, s in enumerate(secs):
+    m = (obs["SectionID"] == s).to_numpy()
+    cond = obs.loc[m, "Condition"].iloc[0]
+    # top row: borrowed Mog transcript (matched pixels only)
+    mm = m & matched
+    g = gene_vec[mm]
+    sc0 = axes[0, col].scatter(z[mm], y[mm], c=g, cmap="Reds", s=2.5, rasterized=True,
+                               vmin=np.nanpercentile(gene_vec, 2), vmax=np.nanpercentile(gene_vec, 98))
+    axes[0, col].set_title(f"{cond}: borrowed Mog (MERFISH)", fontsize=FS["s"])
+    # bottom row: measured HexCer 42:2;O2 lipid, same matched pixels for a fair comparison
+    lv = lipid_vec[mm]
+    sc1 = axes[1, col].scatter(z[mm], y[mm], c=lv, cmap="plasma", s=2.5, rasterized=True,
+                               vmin=np.nanpercentile(lipid_vec[matched], 2),
+                               vmax=np.nanpercentile(lipid_vec[matched], 98))
+    axes[1, col].set_title(f"{cond}: HexCer 42:2;O2 (MALDI)", fontsize=FS["s"])
+    for ax in (axes[0, col], axes[1, col]):
+        cl.style.spatial_axes(ax)
+        ax.set_xlim(z.min(), z.max()); ax.set_ylim(y.min(), y.max())
+cl.style.lightweight_colorbar(sc0, list(axes[0]), label="Mog (borrowed)")
+cl.style.lightweight_colorbar(sc1, list(axes[1]), label="HexCer 42:2;O2")
+fig.suptitle("a borrowed myelin gene tracks a measured myelin lipid, pixel for pixel",
+             fontsize=FS["m"])
+plt.show()""")
+
+md(r"""⚠️ **CHECKPOINT.** The two rows light up the **same white-matter tracts**: the borrowed `Mog`
+transcript (top, from MERFISH cells) and the measured `HexCer 42:2;O2` lipid (bottom, from our MALDI)
+both trace the fibre tracts on both sections. That co-localisation is the per-pixel proof that the
+shared-coordinate match worked: a gene and a lipid, measured in different mice on different instruments,
+agree on where myelin is, because both were borrowed into the same CCF coordinates. This is the same
+gene<->lipid relationship the region-level XGBoost will quantify later, seen here as a raw picture.""")
+
+md(r"""## 2.2 · the per-pixel cell-type territory map
+
+The match handed each pixel not just genes but a **cell type**, the majority Allen `subclass` of the
+MERFISH cells in its ball. Painting that gives a per-pixel cell-type *territory* map: where, on our
+MALDI tissue, the transcriptome says oligodendrocytes, astrocytes, and the various neuron classes live.
+
+🔬 **TASK.** Colour the matched pixels by their most common borrowed cell-type subclass, keeping the
+handful of largest subclasses so the legend stays legible.""")
+
+code(r"""# per-pixel cell-type territories: colour each matched pixel by its majority MERFISH subclass
+ct = celltype.copy()
+top_ct = ct.value_counts().head(8).index.tolist()      # the 8 most common subclasses, for a clean legend
+ct_plot = ct.where(ct.isin(top_ct), other=np.nan)
+
+palette = plt.get_cmap("tab10")
+cmap_ct = {name: palette(i) for i, name in enumerate(top_ct)}
+
+secs = sorted(obs["SectionID"].unique())
+fig, axes = plt.subplots(1, len(secs), figsize=(5.2 * len(secs), 4.4),
+                         constrained_layout=True)
+if len(secs) == 1:
+    axes = [axes]
+z, y = obs["zccf"].to_numpy(), -obs["yccf"].to_numpy()
+for ax, s in zip(axes, secs):
+    m = (obs["SectionID"] == s).to_numpy()
+    # faint grey for matched-but-not-top pixels, for anatomical context
+    bg = m & ct.notna().to_numpy() & ~ct_plot.notna().to_numpy()
+    ax.scatter(z[bg], y[bg], c="0.85", s=2.0, rasterized=True)
+    for name in top_ct:
+        sel = m & (ct_plot == name).to_numpy()
+        if sel.any():
+            ax.scatter(z[sel], y[sel], color=cmap_ct[name], s=2.5, rasterized=True, label=name)
+    cl.style.spatial_axes(ax)
+    ax.set_xlim(z.min(), z.max()); ax.set_ylim(y.min(), y.max())
+    ax.set_title(obs.loc[m, "Condition"].iloc[0], fontsize=FS["m"])
+axes[-1].legend(fontsize=FS["xs"], markerscale=3, loc="center left", bbox_to_anchor=(1.0, 0.5))
+fig.suptitle("per-pixel cell-type territories, borrowed from MERFISH by shared coordinates",
+             fontsize=FS["m"])
+plt.show()""")
+
+md(r"""💡 **HINT.** The territories are anatomically sensible: an oligodendrocyte subclass (`Oligo NN`)
+paints the white-matter tracts, astrocyte subclasses fill the grey matter, and the neuron subclasses
+tile the cortical and thalamic regions. Each colour is a *majority vote* of real MERFISH cells inside
+each pixel's ball, so the map is the transcriptome's opinion of our tissue's cellular composition.
+
+⚠️ **CHECKPOINT.** You should see coherent coloured territories, not random speckle. The oligodendrocyte
+territory overlapping the same tracts as the `Mog`/`HexCer` map above is the consistency check: genes,
+lipid, and cell type all agree on where the white matter is.""")
+
+md(r"""## 2.3 · which lipid territories are also cell-type territories
+
+Each pixel now carries two independent labelings: a **lipizone** (its lipid-defined cluster, from the
+earlier clustering notebook, in `obs.lipizone_names`) and a **cell type** (its borrowed MERFISH
+subclass). The natural multimodal question is colocalisation: *which lipizones occupy the same tissue as
+which cell types?* We answer it with **reciprocal enrichment**, the metric from the Lipid Brain Atlas.
+
+The idea is a doubly-normalised crosstab. Count co-occurring pixels in a lipizone x cell-type table.
+Normalise once down the columns and divide by the mean, giving how enriched each cell type is within
+each lipizone. Normalise the transpose the same way, giving how enriched each lipizone is within each
+cell type. Multiply the two element-wise. A pair scores high only when the lipizone is unusually full of
+that cell type *and* the cell type is unusually full of that lipizone, a *reciprocal* agreement that is
+robust to one side simply being large. The helper `cl.multimodal.reciprocal_enrichment` does exactly
+this and zeroes out pairs with too few co-occurring pixels.
+
+🔬 **TASK.** Build the lipizone x cell-type reciprocal-enrichment matrix on the matched pixels, then
+show it as a heatmap.""")
+
+code(r"""# reciprocal enrichment between the lipid-defined lipizones and the borrowed cell types
+both = adata.obs.loc[celltype.notna()].copy()           # only matched pixels carry a cell type
+ct_matched = celltype[celltype.notna()]
+recip = M.reciprocal_enrichment(both["lipizone_names"], ct_matched,
+                                min_pixels=50, min_enrichment=5.0)
+print("reciprocal-enrichment matrix (lipizones x cell-type columns kept):", recip.shape)
+
+# keep the most strongly-colocalising lipizones (rows) so the heatmap is legible
+row_strength = recip.max(axis=1).sort_values(ascending=False)
+rows_keep = row_strength.head(40).index
+Rm = recip.loc[rows_keep]
+# order rows and columns by their argmax for a clean near-diagonal block structure
+Rm = Rm.loc[:, Rm.columns[np.argsort(Rm.values.argmax(axis=0))]]
+Rm = Rm.loc[Rm.index[np.argsort(Rm.values.argmax(axis=1))]]
+
+fig, ax = plt.subplots(figsize=(9, 7))
+im = ax.imshow(Rm.values, aspect="auto", cmap="magma",
+               vmin=0, vmax=np.percentile(Rm.values, 99))
+ax.set_xticks(range(Rm.shape[1]))
+ax.set_xticklabels(Rm.columns, rotation=90, fontsize=FS["xs"])
+ax.set_yticks(range(Rm.shape[0]))
+ax.set_yticklabels(Rm.index, fontsize=4)
+ax.set_xlabel("borrowed MERFISH cell type (subclass)")
+ax.set_ylabel("lipizone (lipid-defined cluster)")
+ax.set_title("reciprocal enrichment: lipid territories vs cell-type territories", fontsize=FS["m"])
+cl.style.lightweight_colorbar(im, ax, label="reciprocal enrichment")
+plt.tight_layout(); plt.show()""")
+
+md(r"""⚠️ **CHECKPOINT.** The heatmap is *blocky*, not uniform: most lipizones light up against one or a
+few cell types, the bright cells showing lipizone<->cell-type pairs that co-occupy the same tissue far
+more than chance. That structure is the per-pixel multimodal payoff: a lipid-defined territory is, very
+often, also a cell-type territory, because the cells that build a region's membranes shape its lipidome.
+This is the same gene<->lipid logic as the region-level model, read at single-pixel resolution and
+phrased in cell types rather than gene programs.
+
+❓ **QUESTION.** A lipizone that lights up strongly against the oligodendrocyte subclass is, in effect, a
+white-matter lipid signature. How does that connect to the `Mog`/`HexCer 42:2;O2` map two cells above,
+and to the *myelination* gene program XGBoost will surface at the region level later? (They are three
+views of one biology: oligodendrocytes, myelin genes, myelin lipids.)
+
+---
+
+We have now done the integration the fine way and seen it physically: a borrowed gene map, a cell-type
+territory map, and a lipizone x cell-type colocalisation. The rest of the notebook does the *same*
+gene<->lipid question at the coarser region granularity, where one number per region per gene lets a
+gradient-boosted model rank gene *programs* and gene ontology *name* them. Two zoom levels, one bridge.""")
+
+# ----------------------------------------------------------------------------
+md(r"""## 3 · build the per-region lipid-change matrix
 
 Our statistical unit changes here. Until now a pixel was a unit. But a single MERFISH region average is
 one number per gene, so to line the two modalities up we must also reduce each lipid to one number per
@@ -236,7 +538,7 @@ each has 173 lipid changes. The max difference between our hand-built VISp row a
 essentially zero (floating-point dust), so the helper is doing precisely what we did by hand.""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 3 · bring in the genes and join on the region
+md(r"""## 4 · bring in the genes and join on the region
 
 Now the other modality. The file `avemerfish_imputed_named.parquet` is the Allen MERFISH transcriptome,
 imputed to 8460 genes and **averaged inside each Allen region**. Its row index is the Allen acronym, the
@@ -278,7 +580,7 @@ this in mind: it is exactly why, in a moment, we compress the 8460 genes into a 
 before we let any model see them.""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 4 · gradient-boosted trees, from the ground up
+md(r"""## 5 · gradient-boosted trees, from the ground up
 
 We are about to ask a model to predict each lipid's change from gene expression. The model is
 **XGBoost**, gradient-boosted decision trees. The name sounds heavy; the idea is light, and you should
@@ -340,7 +642,7 @@ guardrails in the model object are buying us that smoothness rather than a fit t
 dot? (Hint: depth, and how big a step each tree is allowed to take.)""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 5 · NMF gene programs as the features
+md(r"""## 6 · NMF gene programs as the features
 
 We will not feed 8460 raw genes to XGBoost. With only 109 regions, that is hopeless: the model would
 have 8460 knobs to fit 109 numbers and would memorise noise. We compress the genes first, exactly as
@@ -395,7 +697,7 @@ the gene ontology step at the end will test, formally.
 program features. The model now has a fighting chance against 109 examples.""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 6 · one regressor per lipid, scored honestly
+md(r"""## 7 · one regressor per lipid, scored honestly
 
 Now the core. For each of the 173 lipids we train one XGBoost regressor that predicts that lipid's
 per-region change from the 20 gene programs. To know whether the model actually learned, we must score
@@ -481,7 +783,7 @@ ax.set_title(f"{n_good}/{len(scores)} lipids predicted with r > 0.3", fontsize=F
 plt.tight_layout(); plt.show()""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 7 · SHAP: which gene program drives each prediction
+md(r"""## 8 · SHAP: which gene program drives each prediction
 
 A test r tells you a model predicts well. It does not tell you *why*, which program the model leaned on.
 For that we use **SHAP**, SHapley Additive exPlanations. The idea comes from game theory. Imagine the
@@ -547,7 +849,7 @@ md(r"""⚠️ **CHECKPOINT.** One program stands clearly at the top: `program2`.
 one that matters biologically: *which genes is program2 made of?*""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 8 · read the leading genes of the top program
+md(r"""## 9 · read the leading genes of the top program
 
 A program is a recipe, a row of `H`, one non-negative weight per gene. The genes with the biggest
 weights *define* the program. The helper `cl.multimodal.top_genes_for_program` sorts a program's row of
@@ -588,7 +890,7 @@ experiment would you need to move from "predicts" to "causes"? (Hint: think pert
 correlation.)""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 9 · gene ontology: name the biology of a program
+md(r"""## 10 · gene ontology: name the biology of a program
 
 We have genes. We want biology. A list of gene symbols is not yet a story; **gene ontology** turns it
 into one. The Gene Ontology is a controlled vocabulary of biological terms, organised into three
@@ -755,7 +1057,7 @@ best_leading = multimodal.top_genes_for_program(H, genes, best_idx, top=12)
 print(f"{best_prog} leading genes:", list(best_leading.index))""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 10 · the negative control: a permutation null
+md(r"""## 11 · the negative control: a permutation null
 
 Before we believe any of this, we owe ourselves a sanity check. A test r of 0.7 for the best lipids
 *feels* convincing, but with only 109 regions, could a model score that high by chance, just by
@@ -827,7 +1129,7 @@ is that the right thing to break, rather than, say, shuffling the gene values? (
 correspondence is the scientific claim?)""")
 
 # ----------------------------------------------------------------------------
-md(r"""## 11 · the publication figure
+md(r"""## 12 · the publication figure
 
 This is where you do careful scientific plotting. We assemble one multi-panel figure that tells the
 whole story at a glance, following the lab figure rules: a small fixed set of font sizes, no top or
@@ -916,9 +1218,20 @@ print("saved", out_pdf)""")
 md(r"""## what you built
 
 You integrated two experiments that never touched the same tissue, the MALDI lipidome and the Allen
-MERFISH transcriptome, through the one thing they share: the Allen anatomical atlas. You reduced both
-to a common unit, the region, and asked a clean question: do a region's genes predict where its
-lipidome changes in pregnancy?
+MERFISH transcriptome, through the one thing they share: the same 3D Allen coordinate space. You did it
+at two granularities of one gene<->lipid question.
+
+The fine, per-pixel way came first. You built a cKDTree on the MERFISH cell coordinates, queried every
+cell within a small ball of each MSI pixel, and borrowed their genes (averaged) and their cell type
+(majority vote). Only about 60% of pixels matched at 75 um, rising to about 77% at 100 um, because the
+MSI plane only overlaps the discrete MERFISH coronal sections, and that is the honest geometry of the
+match. The payoff was visual and immediate: a borrowed `Mog` myelin transcript tracked the measured
+`HexCer 42:2;O2` myelin lipid pixel for pixel, a per-pixel cell-type territory map placed
+oligodendrocytes on the white-matter tracts, and a lipizone x cell-type reciprocal-enrichment heatmap
+showed that lipid territories are very often cell-type territories.
+
+The coarse, per-region way did the rest. You reduced both modalities to the named Allen region and asked
+a clean question: do a region's genes predict where its lipidome changes in pregnancy?
 
 The pipeline, in one breath: build the per-region lipid-change matrix, join the region-averaged gene
 expression, compress 8460 genes into 20 NMF gene programs, fit one gradient-boosted tree per lipid, and
@@ -929,11 +1242,13 @@ Gene ontology then named the most biologically coherent program: myelination, bu
 `Plp1`, `Mal`, `Mbp`, and `Mog`. A permutation null confirmed the signal was real, not a small-sample
 artefact: shuffling the region labels collapsed the score to zero.
 
-The closing insight is the one to carry forward. The lipids that move most in pregnancy include the
+The closing insight is the one to carry forward, and the two granularities tell it in unison. At the
+pixel level, oligodendrocyte territories, the borrowed `Mog` gene, and the `HexCer 42:2;O2` lipid all
+fall on the same white matter. At the region level, the lipids that move most in pregnancy include the
 myelin sphingolipids, and the gene program that best predicts where the lipidome changes is the program
-that builds myelin. Two modalities, measured years and labs apart, point at the same biology. That is
-what integration by shared coordinates buys you: not proof of cause, but a strong, testable hypothesis
-about which genes to perturb next.""")
+that builds myelin. Two modalities, measured years and labs apart, point at the same biology, whether
+you read it pixel by pixel or region by region. That is what integration by shared coordinates buys
+you: not proof of cause, but a strong, testable hypothesis about which genes to perturb next.""")
 
 # ----------------------------------------------------------------------------
 nb = new_notebook(cells=cells)
