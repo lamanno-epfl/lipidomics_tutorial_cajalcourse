@@ -48,3 +48,6 @@ env/
 *.log
 outputs/
 scratch/
+
+# generated student-release tree
+release/
