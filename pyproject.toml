@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cajal-lipidomics"
+version = "0.0.1"
+description = "Helpers for the CAJAL spatial-metabolomics course (style, plotting, IO, analysis)."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn",
+    "anndata",
+    "scanpy",
+    "statsmodels",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
