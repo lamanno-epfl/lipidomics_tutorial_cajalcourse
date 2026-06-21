@@ -96,10 +96,11 @@ code(r"""# pwd = "print working directory": the folder the shell is currently in
 # The ! sends this line to the shell instead of to Python.
 !pwd""", tag="keep")
 
-md(r"""⚠️ **CHECKPOINT** — you should see a path printed, something ending in
-`lipidomics_tutorial_cajalcourse`. That is your **working directory**: the folder every command
-treats as "here" unless you say otherwise. The shell always has exactly one working directory,
-the way you are always standing in exactly one room.""")
+md(r"""⚠️ **CHECKPOINT** — you should see a path printed, ending in either
+`lipidomics_tutorial_cajalcourse` or `notebooks/00_intro` (it depends on which folder your editor
+launched the notebook from). Either is fine. That path is your **working directory**: the folder
+every command treats as "here" unless you say otherwise. The shell always has exactly one working
+directory, the way you are always standing in exactly one room.""")
 
 md(r"""### listing what is around you: `ls`
 
