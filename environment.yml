@@ -1,35 +1,45 @@
-# CPU-only project environment for the course (no GPU anywhere).
-#
-# Create it once:
+# CPU-only project environment for the course (no GPU anywhere). One command gives a COMPLETE
+# env that runs every notebook (verified by re-executing all 12 in this env):
 #     mamba env create -f environment.yml
 #     mamba activate cajal-lipidomics
+#     pip install -e .            # the course helper package (cajal_lipidomics)
 #     python -m ipykernel install --user --name cajal-lipidomics --display-name "cajal-lipidomics"
 #
-# Then install EUCLID (the public package students clone) so its pinned scientific
-# stack (anndata, scanpy, squidpy, harmonypy, leidenalg, numpyro, jax, xgboost,
-# rdkit, zarr, opentsne ...) comes in at known-good versions:
-#     git clone https://github.com/lamanno-epfl/EUCLID.git
-#     pip install -e EUCLID
-#     pip install -r requirements-extra.txt
-#
-# uMAIA is NOT installed here: it pins an older jax/numpyro that conflicts with
-# EUCLID. The normalization fit is run once by the instructor in a throwaway
-# `cajal-umaia` env (see environment-umaia.yml); students inspect the fitted
-# parameters and unroll the histogram-matching transform in pure numpy/scipy, which
-# needs none of it. See PLAN.md and notebook 3.
+# Notebook 3 (uMAIA) uses a SEPARATE env, environment-umaia.yml (older jax/numpyro stack).
+# You only need to clone EUCLID for the one illustrative "production clustering" cell in NB6
+# (git clone https://github.com/lamanno-epfl/EUCLID && pip install -e EUCLID); the transparent
+# notebooks do not import it.
 name: cajal-lipidomics
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.11
   - pip
   - git
   - jupyterlab
   - ipykernel
   - ipywidgets
   - nbformat
-  # build tools some pip wheels want
-  - compilers
-  - cmake
+  # scientific stack (everything the notebooks import)
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - statsmodels
+  - anndata
+  - scanpy
+  - harmonypy
+  - leidenalg
+  - python-igraph
+  - openTSNE
+  - umap-learn
+  - xgboost
+  - numba
+  - zarr
+  - rdkit
+  - adjusttext
+  - tqdm
   - pip:
       - -r requirements-extra.txt
