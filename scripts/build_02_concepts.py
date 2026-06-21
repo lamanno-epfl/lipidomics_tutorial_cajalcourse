@@ -398,9 +398,9 @@ ax.set_xticks(xpos); ax.set_xticklabels(lipids, rotation=90)
 ax.set_ylabel("intensity"); ax.set_title(f"pixel {i}: true vs NMF reconstruction from 2 programs")
 ax.legend(); plt.tight_layout(); plt.show()""")
 
-md(r"""⚠️ **CHECKPOINT.** The reconstruction error is small (a few percent) and the true vs
-reconstructed bars for one pixel nearly overlap: two non-negative programs already explain most of an
-8-lipid table. Program 1 and program 2 cleanly map onto the two regions.
+md(r"""⚠️ **CHECKPOINT.** The reconstruction error is about ten percent and the true vs
+reconstructed bars for one pixel nearly overlap: two non-negative programs already explain the bulk
+of an 8-lipid table. Program 1 and program 2 cleanly map onto the two regions.
 
 ❓ **QUESTION.** PCA gave you axes with mixed signs; NMF gave you two recipes you could almost name
 ("the sphingolipid program", "the membrane-phospholipid program"). For writing a results paragraph
@@ -608,7 +608,7 @@ adata.obsm["X_harmony"] = W_harm.astype("float32")
 
 # 1) kNN graph on the Harmonized embedding; 2) Leiden communities on that graph
 sc.pp.neighbors(adata, n_neighbors=15, use_rep="X_harmony", random_state=RNG_SEED)
-sc.tl.leiden(adata, resolution=0.3, random_state=RNG_SEED, flavor="igraph", n_iterations=2)
+sc.tl.leiden(adata, resolution=0.05, random_state=RNG_SEED, flavor="igraph", n_iterations=2)
 
 print("Leiden clusters found:", sorted(adata.obs["leiden"].unique().tolist()))
 print(adata.obs["leiden"].value_counts())""")
@@ -630,9 +630,10 @@ md(r"""⚠️ **CHECKPOINT.** Two Leiden clusters, each lining up almost perfect
 counts pile onto the diagonal. The neighbour graph plus community detection rediscovered our two
 regions with zero supervision.
 
-💡 **HINT.** If you got one giant cluster or many tiny ones, that is the `resolution` knob talking.
-Try `resolution=0.1` (fewer clusters) or `resolution=1.0` (more) and rerun to feel its effect, this is
-exactly the dial you will tune on the real data.""")
+💡 **HINT.** Our two regions are so cleanly separated that we used a low `resolution=0.05` to get
+exactly two clusters; push it higher and Leiden happily splits each blob further. Try
+`resolution=0.3` and rerun to watch the count climb, this is exactly the dial you will tune on the
+real data, where the right number of lipizones is a judgement call.""")
 
 # ----------------------------------------------------------------------------
 # kNN label transfer

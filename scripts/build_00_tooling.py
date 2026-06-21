@@ -230,11 +230,13 @@ Let us look at the live history of *this* repo. The next cell asks git to show t
 status and the most recent commits. These are read-only: they change nothing.""")
 
 code(r"""# git status: a summary of what changed since the last commit. Safe, read-only.
-!git status --short --branch""", tag="keep")
+# -c color.ui=false turns OFF the colour codes so the saved output stays clean text.
+!git -c color.ui=false status --short --branch""", tag="keep")
 
 code(r"""# git log: the lab notebook itself. --oneline prints one commit per line;
 # -n 3 keeps the three most recent. Each line is a snapshot someone saved.
-!git log --oneline -n 3""", tag="keep")
+# Again -c color.ui=false keeps the committed output free of colour escape codes.
+!git -c color.ui=false log --oneline -n 3""", tag="keep")
 
 md(r"""⚠️ **CHECKPOINT** — `git status` printed a branch line (probably `## main`) and `git log`
 printed at least one commit with a short code and a message. You are reading the actual history
@@ -394,12 +396,15 @@ mention `cajal-lipidomics`, switch kernels now, before notebook 01.""")
 
 code(r"""# Confirm the live kernel. This is the same idea as in section 3, repeated on purpose:
 # the kernel IS the environment, and beginners conflate "I created the env" with "I selected it".
-import os
 import sys
+from pathlib import Path
 
-# Which environment does this kernel live in? conda records the active env name here.
-env_name = os.environ.get("CONDA_DEFAULT_ENV", "(none)")
-print("kernel python:", sys.executable)
+# Where does THIS kernel's python live? The path is the honest source of truth: it does not
+# depend on which env your terminal happened to have active when the kernel started. An env
+# python sits in .../envs/<env_name>/bin/python, so the parent of "bin" is the env folder.
+exe = Path(sys.executable)
+env_name = exe.parent.parent.name   # .../envs/cajal-lipidomics/bin/python -> "cajal-lipidomics"
+print("kernel python:   ", exe)
 print("environment name:", env_name)
 
 # The honest test of "right setup" is whether the course libraries import, not the literal
@@ -412,9 +417,10 @@ except ModuleNotFoundError:
     print("and choose cajal-lipidomics, then run this cell again.")""", tag="keep")
 
 md(r"""⚠️ **CHECKPOINT** — the cell printed `scanpy imports cleanly -> this kernel can run the
-course`. The environment name should read `cajal-lipidomics` on your laptop; if it shows something
-else but scanpy still imports, you simply named your env differently, which is fine. If instead it
-said scanpy is missing, you are on the wrong kernel: switch with the picker and rerun.
+course`, and the environment name read `cajal-lipidomics`, derived straight from the kernel's own
+python path. If it shows some other name but scanpy still imports, you simply named your env
+differently, which is fine. If instead it said scanpy is missing, you are on the wrong kernel:
+switch with the picker and rerun.
 
 💡 **HINT** — the official, screenshot-rich guides are Microsoft's **"Jupyter Notebooks in VS
 Code"** (<https://code.visualstudio.com/docs/datascience/jupyter-notebooks>) and the **"Data Science
@@ -507,9 +513,12 @@ all green, you are genuinely ready.""")
 
 code(r"""# Final readiness check: do the course libraries import? Nothing scientific, just confidence.
 # If they all import, this kernel can run every later notebook, whatever your env is named.
-import os
+import sys
+from pathlib import Path
 
-env_name = os.environ.get("CONDA_DEFAULT_ENV", "(unknown)")
+# Same trick as section 4: read the env name off the kernel's own python path, which is honest
+# regardless of what your terminal had active when the kernel launched.
+env_name = Path(sys.executable).parent.parent.name
 print(f"environment: {env_name}\n")
 
 checks = []
