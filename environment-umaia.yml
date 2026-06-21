@@ -1,0 +1,28 @@
+# INSTRUCTOR / DEV ONLY. uMAIA pins an older jax+numpyro that conflicts with EUCLID,
+# so the normalization fit is run here, once, in isolation. Students never install this:
+# they receive the fitted parameters + normalized data and unroll the histogram-matching
+# transform in pure numpy/scipy (notebook 3), which needs none of this.
+#
+#     mamba env create -f environment-umaia.yml
+#     mamba activate cajal-umaia
+#     git clone https://github.com/lamanno-epfl/uMAIA.git
+#     pip install -e uMAIA
+name: cajal-umaia
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - jax==0.4.14
+      - jaxlib==0.4.14
+      - numpyro==0.12.1
+      - optax==0.1.7
+      - numpy
+      - pandas
+      - scipy
+      - scikit-learn
+      - zarr==2.14.2
+      - anndata
+      - tqdm
+      - matplotlib

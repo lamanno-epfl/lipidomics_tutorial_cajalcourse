@@ -1,0 +1,35 @@
+# CPU-only project environment for the course (no GPU anywhere).
+#
+# Create it once:
+#     mamba env create -f environment.yml
+#     mamba activate cajal-lipidomics
+#     python -m ipykernel install --user --name cajal-lipidomics --display-name "cajal-lipidomics"
+#
+# Then install EUCLID (the public package students clone) so its pinned scientific
+# stack (anndata, scanpy, squidpy, harmonypy, leidenalg, numpyro, jax, xgboost,
+# rdkit, zarr, opentsne ...) comes in at known-good versions:
+#     git clone https://github.com/lamanno-epfl/EUCLID.git
+#     pip install -e EUCLID
+#     pip install -r requirements-extra.txt
+#
+# uMAIA is NOT installed here: it pins an older jax/numpyro that conflicts with
+# EUCLID. The normalization fit is run once by the instructor in a throwaway
+# `cajal-umaia` env (see environment-umaia.yml); students inspect the fitted
+# parameters and unroll the histogram-matching transform in pure numpy/scipy, which
+# needs none of it. See PLAN.md and notebook 3.
+name: cajal-lipidomics
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - git
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+  - nbformat
+  # build tools some pip wheels want
+  - compilers
+  - cmake
+  - pip:
+      - -r requirements-extra.txt

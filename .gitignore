@@ -1,0 +1,50 @@
+# ---- source material & private dev notes (never publish) ----
+bordeaux-material/
+knowledge/
+
+# ---- heavy data (provide via download/build scripts, never commit) ----
+*.parquet
+*.h5ad
+*.zarr/
+*.zarr
+*.npy
+*.nrrd
+*.zip
+*.tar.gz
+*.tar
+*.tif
+*.tiff
+data/
+course/data/
+**/zenodo/
+
+# allow small curated sample data explicitly with: git add -f
+# (e.g. course/data/sample/*.csv)
+
+# ---- python / jupyter ----
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.virtual_documents/
+*.egg-info/
+.eggs/
+build/
+dist/
+.env
+.venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# ---- os / editor ----
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# ---- notebook outputs / scratch ----
+*.log
+outputs/
+scratch/
