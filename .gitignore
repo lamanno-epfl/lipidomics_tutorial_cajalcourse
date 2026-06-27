@@ -54,3 +54,7 @@ release/
 
 # cloned third-party packages (students clone EUCLID here in notebook 06)
 external/
+
+# EUCLID notebook run artifacts
+notebooks/**/euclid_course_*
+notebooks/**/*.pkl
