@@ -20,13 +20,14 @@ MERFISH_FULL = "cell_filtered_w500genes.parquet"
 MERFISH_SUB = "data/merfish_plane.parquet"
 AP = (5.8, 7.2)  # CCF x window around the course coronal plane (~6.5)
 
-# (path_on_disk, archive_name) — what students get
+# (path_on_disk, archive_name) — the PROVIDED inputs only. Students pull the raw MALDI from
+# METASPACE themselves and build everything else (the data/derived/ chain); we never ship the
+# instructor's processed lipids or lipizones.
 def manifest(include_sdf=True):
     items = [
-        ("data/sections_pair.h5ad", "sections_pair.h5ad"),           # the analysis substrate
-        ("data/umaia_input.npz", "umaia_input.npz"),                 # NB3 uMAIA input tensor
-        ("avemerfish_imputed_named.parquet", "avemerfish_imputed_named.parquet"),  # NB8 region x gene
-        (MERFISH_SUB, "merfish_plane.parquet"),                      # NB8 per-cell (plane subset)
+        ("data/provided/registration_ccf.parquet", "provided/registration_ccf.parquet"),  # the one provided piece: per-pixel CCF + Allen region (registration output; ABBA is concept-only)
+        ("avemerfish_imputed_named.parquet", "avemerfish_imputed_named.parquet"),  # NB8 region x gene MERFISH
+        (MERFISH_SUB, "merfish_plane.parquet"),                      # NB8 per-cell MERFISH (plane subset)
         ("data/refs/HMDB_complete.csv", "refs/HMDB_complete.csv"),
         ("data/refs/lipidclasscolors.h5ad", "refs/lipidclasscolors.h5ad"),
     ]
