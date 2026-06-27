@@ -23,6 +23,41 @@ from sklearn.metrics.pairwise import cosine_similarity
 from .style import FS, lightweight_colorbar, spatial_axes
 
 
+def distinct_colors(n):
+    """n visually distinct hex colours via golden-angle hue spacing with varied lightness."""
+    import colorsys
+    out = []
+    for i in range(n):
+        h = (i * 0.6180339887) % 1.0
+        light = 0.45 + 0.18 * (i % 3) / 2.0
+        sat = 0.65 + 0.25 * ((i // 3) % 2)
+        out.append("#%02x%02x%02x" % tuple(int(255 * c) for c in colorsys.hls_to_rgb(h, light, sat)))
+    return out
+
+
+def lipizone_colors(adata, key="lipizone", rep="X_nmf"):
+    """Assign each cluster a colour so molecularly similar clusters get adjacent colours.
+
+    Orders clusters by hierarchical leaf-ordering on their centroid cosine distance (the
+    Lipid Brain Atlas idea), then maps that order to a distinct palette, so the spatial map
+    reads as a smooth, coherent anatomy rather than random confetti. Returns {label: hex}.
+    """
+    from scipy.cluster.hierarchy import linkage, leaves_list
+    from scipy.spatial.distance import squareform
+    from sklearn.metrics.pairwise import cosine_similarity
+    labels = adata.obs[key].astype(str)
+    cats = sorted(labels.unique())
+    Z = adata.obsm[rep] if rep in adata.obsm else np.asarray(adata.X)
+    cent = np.vstack([Z[(labels == c).to_numpy()].mean(0) for c in cats])
+    if len(cats) > 2:
+        d = squareform(1 - cosine_similarity(cent), checks=False)
+        order = leaves_list(linkage(d, method="average", optimal_ordering=True))
+    else:
+        order = np.arange(len(cats))
+    pal = distinct_colors(len(cats))
+    return {cats[order[i]]: pal[i] for i in range(len(cats))}
+
+
 def _lipid_vector(adata, lipid: str) -> np.ndarray:
     j = list(adata.var_names).index(lipid)
     x = adata.X[:, j]
