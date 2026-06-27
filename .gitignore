@@ -51,3 +51,6 @@ scratch/
 
 # generated student-release tree
 release/
+
+# cloned third-party packages (students clone EUCLID here in notebook 06)
+external/
