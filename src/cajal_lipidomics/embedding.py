@@ -78,13 +78,26 @@ def harmonize(W, batch_labels, random_state=0):
     return Z
 
 
-def leiden_clusters(emb, n_neighbors=15, resolution=1.0, random_state=0):
-    """kNN graph + Leiden communities on an embedding (via scanpy)."""
-    import scanpy as sc, anndata as ad
-    a = ad.AnnData(np.asarray(emb, float))
-    sc.pp.neighbors(a, n_neighbors=n_neighbors, use_rep="X", random_state=random_state)
-    sc.tl.leiden(a, resolution=resolution, random_state=random_state, flavor="igraph", n_iterations=2, directed=False)
-    return a.obs["leiden"].to_numpy()
+def leiden_clusters(emb, n_neighbors=40, n_iterations=5, resolution=None, seed=230598):
+    """Fast Leiden exactly as EUCLID `_leidenalg_clustering`: a k-nearest-neighbour graph
+    (k=40) on the embedding, then leidenalg with the ModularityVertexPartition. Modularity gives
+    clean, contiguous lipid territories; the newer scanpy igraph flavour over-fragments into
+    speckle and the full sc.tl.leiden is far too slow on ~200k pixels. Pass `resolution` to switch
+    to the resolution-tunable RBConfigurationVertexPartition instead of plain modularity."""
+    import leidenalg, igraph as ig
+    from sklearn.neighbors import NearestNeighbors
+    X = np.asarray(emb, float)
+    knn = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1).fit(X).kneighbors_graph(X)
+    src, dst = knn.nonzero()
+    g = ig.Graph(n=X.shape[0], edges=list(zip(src.tolist(), dst.tolist())))
+    g.simplify()
+    if resolution is None:
+        part = leidenalg.find_partition(g, leidenalg.ModularityVertexPartition,
+                                        n_iterations=n_iterations, seed=seed)
+    else:
+        part = leidenalg.find_partition(g, leidenalg.RBConfigurationVertexPartition,
+                                        resolution_parameter=resolution, n_iterations=n_iterations, seed=seed)
+    return np.array(part.membership)
 
 
 def knn_transfer(emb_ref, labels_ref, emb_query, k=15):

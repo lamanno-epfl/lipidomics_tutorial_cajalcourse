@@ -134,20 +134,24 @@ def match_pixels_to_cells(adata_obs, cells, gene_cols, radius=0.075, celltype_ke
     return gdf, pd.Series(ct_out, index=adata_obs.index, name=celltype_key)
 
 
-def reciprocal_enrichment(row_labels, col_labels, min_pixels=50, min_enrichment=5.0):
-    """Reciprocal-enrichment matrix between two categorical pixel labelings (e.g. lipizone x
-    cell type): element-wise product of (enrichment of cols within rows) and (rows within
-    cols). High value = the two territories co-occur far more than expected. Copied from the LBA.
+def reciprocal_enrichment(row_labels, col_labels):
+    """Reciprocal enrichment between two categorical pixel labelings, exactly as the Lipid Brain
+    Atlas does it (001-IDCARDS): the element-wise product of two directional enrichments. NOT a
+    plain crosstab, which would just count co-occurrence and be dominated by big categories.
+
+    enrichment of a column-category within a row-category = (its fraction in that row) divided by
+    its mean fraction across rows. We compute it both ways (cols-in-rows and rows-in-cols) and
+    multiply, so a pair scores high only if EACH is enriched in the other. Returns a (rows x cols)
+    DataFrame of enrichment scores (use log for display, since they span orders of magnitude).
     """
-    cmat = pd.crosstab(pd.Series(row_labels), pd.Series(col_labels))
-    nd1 = cmat / cmat.sum()
-    nd1 = (nd1.T / nd1.T.mean()).T
-    cmatT = cmat.T
-    nd2 = cmatT / cmatT.sum()
-    nd2 = (nd2.T / nd2.T.mean())
-    recip = nd2 * nd1
-    recip[cmat.T < min_pixels] = 0
-    return recip.loc[:, recip.max() > min_enrichment]
+    r, c = pd.Series(np.asarray(row_labels)), pd.Series(np.asarray(col_labels))
+    c1 = pd.crosstab(r, c)                       # (rows, cols)
+    n1 = c1 / c1.sum()                           # each column sums to 1
+    n1 = (n1.T / n1.T.mean()).T                  # -> enrichment of each col within each row
+    c2 = pd.crosstab(c, r)                       # (cols, rows)
+    n2 = c2 / c2.sum()
+    n2 = (n2.T / n2.T.mean()).T                  # -> enrichment of each row within each col
+    return n1 * n2.T                             # reciprocal enrichment, (rows, cols)
 
 
 def top_genes_for_program(H, genes_df, program_idx, top=50):

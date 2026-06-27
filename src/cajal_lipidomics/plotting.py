@@ -165,9 +165,11 @@ def sorted_lipid_heatmap(adata, group_key, mask=None, cmap="Reds", figsize=(18, 
     df = df.dropna(subset=[group_key])
     avg = df.groupby(group_key, observed=True).mean()
 
-    # cosine distance + optimal leaf ordering on both axes (verbatim recipe)
-    row_d = squareform(1 - cosine_similarity(avg.values), checks=False)
-    col_d = squareform(1 - cosine_similarity(avg.values.T), checks=False)
+    # cosine distance + optimal leaf ordering on both axes (verbatim recipe).
+    # clip at 0: identical rows can yield a tiny negative distance from float error,
+    # which scipy's strict optimal_ordering check would otherwise reject.
+    row_d = squareform(np.clip(1 - cosine_similarity(avg.values), 0, None), checks=False)
+    col_d = squareform(np.clip(1 - cosine_similarity(avg.values.T), 0, None), checks=False)
     row_order = leaves_list(linkage(row_d, method="average", optimal_ordering=True))
     col_order = leaves_list(linkage(col_d, method="average", optimal_ordering=True))
     sorted_df = avg.iloc[row_order, col_order]
@@ -223,3 +225,121 @@ def volcano(diff_df, fc_col="log2fc", q_col="qval", fc_thresh=0.2, q_thresh=0.05
             ax.annotate(str(r[label_col]), (r[fc_col], -np.log10(max(r[q_col], 1e-300))),
                         fontsize=FS["xs"], ha="center")
     return ax
+
+
+# ---- v3 teaching plots (faithful to the Lipid Brain Atlas building blocks) ----
+
+def allen_contours(obs, ax, region_key="acronym", x="x", y="y", color="k", lw=0.4, s=0.6):
+    """Draw Allen region contours: a pixel sits on a contour if a 4-neighbour has a different
+    region. Rasterise the region ids on the (x,y) grid, mark the edges, scatter them."""
+    xs = obs[x].to_numpy().astype(int); ys = obs[y].to_numpy().astype(int)
+    codes = pd.Series(obs[region_key].astype(str)).astype("category").cat.codes.to_numpy()
+    H, W = ys.max() + 2, xs.max() + 2
+    grid = np.full((H, W), -1); grid[ys, xs] = codes
+    edge = np.zeros_like(grid, bool)
+    for dy, dx in ((0, 1), (1, 0)):
+        nb = np.full_like(grid, -1)
+        nb[:-dy or None, :-dx or None] = grid[dy:, dx:]
+        edge |= (grid >= 0) & (nb >= 0) & (grid != nb)
+    ey, ex = np.nonzero(edge)
+    ax.scatter(ex, -ey, c=color, s=s, lw=lw, rasterized=True)
+
+
+def rgb_overlay(adata, lipids, section_key="SectionID", layer=None, x="x", y="y", axes=None):
+    """Overlay up to three lipids as the R, G, B channels of one image per section (each channel
+    per-section 2/98 clipped). Shows where lipids co-localise (white) or separate (pure colours)."""
+    X = adata.layers[layer] if layer else np.asarray(adata.X)
+    cols = [list(adata.var_names).index(l) for l in lipids[:3]]
+    secs = sorted(adata.obs[section_key].unique())
+    if axes is None:
+        fig, axes = plt.subplots(1, len(secs), figsize=(4.2 * len(secs), 3.6), squeeze=False); axes = axes.ravel()
+    for ax, sname in zip(axes, secs):
+        m = (adata.obs[section_key] == sname).to_numpy()
+        xs = adata.obs.loc[m, x].to_numpy().astype(int); ys = adata.obs.loc[m, y].to_numpy().astype(int)
+        H, W = ys.max() + 1, xs.max() + 1
+        img = np.zeros((H, W, 3))
+        for ch, c in enumerate(cols):
+            v = X[m, c]; lo, hi = np.percentile(v, [2, 98]); img[ys, xs, ch] = np.clip((v - lo) / (hi - lo + 1e-9), 0, 1)
+        ax.imshow(img); spatial_axes(ax)
+        ax.set_title(adata.obs.loc[m, "Condition"].iloc[0] if "Condition" in adata.obs else str(sname), fontsize=FS["m"])
+    handles = " / ".join(f"{c}={l}" for c, l in zip("RGB", lipids[:3]))
+    axes[0].set_ylabel(handles, fontsize=FS["xs"])
+    return axes
+
+
+def lipid_lipid_corr(adata, layer=None, ax=None, cmap="RdBu_r"):
+    """Lipid-lipid correlation heatmap, rows/cols cosine optimal-leaf-ordered so co-varying lipids
+    sit together. Reveals the molecular modules NMF will later summarise."""
+    X = adata.layers[layer] if layer else np.asarray(adata.X)
+    C = np.corrcoef(X.T); C = np.nan_to_num(C)
+    d = squareform(1 - np.abs(C), checks=False)
+    order = leaves_list(linkage(d, method="average", optimal_ordering=True))
+    Cs = C[np.ix_(order, order)]
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 6))
+    im = ax.imshow(Cs, cmap=cmap, vmin=-1, vmax=1); ax.set_xticks([]); ax.set_yticks([])
+    ax.set_title("lipid-lipid correlation (clustered)", fontsize=FS["m"])
+    lightweight_colorbar(im, ax, label="Pearson r")
+    return ax, [list(adata.var_names)[i] for i in order]
+
+
+def cluster_size_hist(labels, ax=None):
+    """Histogram of how many pixels each cluster holds (a quick clustering sanity check)."""
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(4.5, 3))
+    sizes = pd.Series(np.asarray(labels)).value_counts().values
+    ax.hist(sizes, bins=20, color="0.4")
+    ax.set_xlabel("pixels per cluster"); ax.set_ylabel("number of clusters")
+    ax.set_title("cluster-size distribution", fontsize=FS["m"]); return ax
+
+
+def tsne_colored(adata, by, kind="lipid", tsne_key="X_tsne", cmap="plasma", point_size=2.0, ax=None, title=None):
+    """t-SNE scatter coloured by a lipid (continuous, 2/98 clipped), an obs column of hex colours
+    (kind='color'), or a continuous obs column (kind='value'). Faithful to EUCLID plot_tsne."""
+    xy = adata.obsm[tsne_key]; order = np.random.RandomState(0).permutation(adata.n_obs)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 5))
+    if kind == "lipid":
+        v = _lipid_vector(adata, by); lo, hi = np.percentile(v, [2, 98])
+        sc = ax.scatter(xy[order, 0], xy[order, 1], c=v[order], cmap=cmap, s=point_size, vmin=lo, vmax=hi, rasterized=True)
+        lightweight_colorbar(sc, ax, label=by)
+    elif kind == "color":
+        ax.scatter(xy[order, 0], xy[order, 1], c=adata.obs[by].to_numpy()[order], s=point_size, rasterized=True)
+    else:
+        v = adata.obs[by].to_numpy().astype(float)[order]; lo, hi = np.nanpercentile(v, [2, 98])
+        sc = ax.scatter(xy[order, 0], xy[order, 1], c=v, cmap="RdBu_r", s=point_size, vmin=lo, vmax=hi, rasterized=True)
+        lightweight_colorbar(sc, ax, label=by)
+    ax.set_xticks([]); ax.set_yticks([]); ax.set_xlabel("t-SNE 1"); ax.set_ylabel("t-SNE 2")
+    ax.set_title(title or f"t-SNE coloured by {by}", fontsize=FS["m"]); return ax
+
+
+def lipizones_on_gray(adata, color_key="lipizone_color", section_key="SectionID", x="x", y="y",
+                      point_size=3.0, axes=None):
+    """Lipizones in colour on top of a faint grey rendering of all tissue (the LBA background style),
+    so a few highlighted territories read against the whole section."""
+    obs = adata.obs; secs = sorted(obs[section_key].unique())
+    if axes is None:
+        fig, axes = plt.subplots(1, len(secs), figsize=(4.2 * len(secs), 3.6), squeeze=False); axes = axes.ravel()
+    for ax, sname in zip(axes, secs):
+        m = (obs[section_key] == sname).to_numpy()
+        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c="0.85", s=point_size, rasterized=True)
+        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c=obs.loc[m, color_key], s=point_size, alpha=0.9, rasterized=True)
+        spatial_axes(ax)
+        ax.set_title(obs.loc[m, "Condition"].iloc[0] if "Condition" in obs else str(sname), fontsize=FS["m"])
+    return axes
+
+
+def marker_barplot(adata, mask, layer=None, lipid_props=None, top=20, ax=None, title="enriched lipids"):
+    """Sorted barplot of the lipids most enriched in a pixel subset (e.g. white matter) vs the rest,
+    coloured by lipid class. Use to see, for example, HexCer/SM enrichment in white matter."""
+    X = adata.layers[layer] if layer else np.asarray(adata.X)
+    m = np.asarray(mask); lfc = np.log2((X[m].mean(0) + 1e-9) / (X[~m].mean(0) + 1e-9))
+    s = pd.Series(lfc, index=list(adata.var_names)).sort_values(ascending=False).head(top)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, max(3, top * 0.22)))
+    colors = None
+    if lipid_props is not None:
+        colors = [lipid_props["color"].get(n, "#999999") if hasattr(lipid_props["color"], "get") else "#777" for n in s.index]
+    ax.barh(range(len(s))[::-1], s.values, color=colors or "#4477aa", height=0.7)
+    ax.set_yticks(range(len(s))[::-1]); ax.set_yticklabels(s.index, fontsize=FS["xs"])
+    ax.set_xlabel("log2 fold change vs rest"); ax.set_title(title, fontsize=FS["m"]); return ax

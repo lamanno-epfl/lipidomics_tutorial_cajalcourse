@@ -55,10 +55,10 @@ def main():
     raw.obsm["X_nmf"] = Wall; raw.obsm["X_harmony"] = Wh
     # t-SNE on the NMF embedding (visualisation only; no UMAP)
     from openTSNE import TSNE
-    raw.obsm["X_tsne"] = TSNE(n_components=2, perplexity=30, n_jobs=8, random_state=0).fit(Wall)
+    raw.obsm["X_tsne"] = np.asarray(TSNE(n_components=2, perplexity=30, n_jobs=8, random_state=0).fit(Wall))
     raw.write_h5ad("data/derived/05_embedded.h5ad")          # NB5 output: NMF + Harmony + t-SNE
     # [6] their OWN lipizones (Leiden) + transfer control->pregnant
-    lab = E.leiden_clusters(Wh, resolution=1.0)
+    lab = E.leiden_clusters(Wh)
     pred, conf = E.knn_transfer(Wh[ctrl], lab[ctrl], Wh[~ctrl], k=15)
     lipz = lab.astype(object); lipz[~ctrl] = pred  # control = Leiden, pregnant = transferred
     raw.obs["lipizone"] = pd.Categorical(lipz.astype(str))
