@@ -2,25 +2,35 @@
 
     python scripts/fetch_data_bundle.py
 
+Resumable (safe to re-run on a flaky connection: it continues, it does not restart). If the Zenodo
+record is still a draft, set ZENODO_TOKEN in your environment and the script fetches the draft via
+the API; once the record is published the same command works for everyone with no token.
+
 The bundle holds the provided inputs (registration/CCF, reference databases, tissue masks, the
-MERFISH plane subset + region-averaged expression, and the Gene Ontology files). The raw MALDI-MSI
-you pull yourself from METASPACE in notebook 1; data/derived/ you build by running the notebooks.
+MERFISH plane subset + region-averaged expression, Gene Ontology files). You pull the raw MALDI-MSI
+yourself from METASPACE in notebook 1; data/derived/ you build by running notebooks 1-6 in order.
 """
 from __future__ import annotations
-import os, sys, zipfile, urllib.request
+import os, subprocess, zipfile
 
-URL = "https://zenodo.org/records/21058014/files/course_data_bundle.zip?download=1"
 DEST = "data/course_data_bundle.zip"
+PUBLIC = "https://zenodo.org/records/21058014/files/course_data_bundle.zip?download=1"
+BUCKET = "https://zenodo.org/api/files/bf78b5ec-d682-47fb-82e6-58c4dc7f0f93/course_data_bundle.zip"
+MIN_BYTES = 1_000_000_000  # the bundle is ~1.01 GB; anything smaller is a partial download
 
 def main():
     os.makedirs("data", exist_ok=True)
-    if not os.path.exists(DEST):
-        print(f"downloading {URL}\n(this is ~1 GB) ...")
-        urllib.request.urlretrieve(URL, DEST)
+    if os.path.exists(DEST) and os.path.getsize(DEST) >= MIN_BYTES:
+        print(f"{DEST} already present.")
+    else:
+        tok = os.environ.get("ZENODO_TOKEN")
+        url = f"{BUCKET}?access_token={tok}" if tok else PUBLIC  # token -> draft access; else public
+        print("downloading the data bundle (~1 GB, resumable) ...")
+        subprocess.run(["curl", "-L", "-C", "-", "--fail", url, "-o", DEST], check=True)
     print("unzipping into data/ ...")
     with zipfile.ZipFile(DEST) as z:
-        z.extractall(".")          # archive paths are already data/...
-    print("done: provided inputs are now under data/")
+        z.extractall(".")  # archive paths are already data/...
+    print("done: provided inputs are under data/")
 
 if __name__ == "__main__":
     main()
