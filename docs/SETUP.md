@@ -36,22 +36,28 @@ the full Anaconda.
 ## 3. Get the course and create the environment
 
 ```bash
-git clone https://github.com/lamanno-epfl/lipidomics_tutorial_cajalcourse.git
+git clone <this repository>
 cd lipidomics_tutorial_cajalcourse
+
+# 1) the main analysis environment
 mamba env create -f environment.yml
 mamba activate cajal-lipidomics
-python -m ipykernel install --user --name cajal-lipidomics --display-name "cajal-lipidomics"
-```
-
-Then install the analysis package EUCLID and the few extras:
-
-```bash
-git clone https://github.com/lamanno-epfl/EUCLID.git
-pip install -e EUCLID
+pip install -e .                      # the cajal_lipidomics helper package the notebooks import
 pip install -r requirements-extra.txt
+python -m ipykernel install --user --name cajal-lipidomics --display-name "cajal-lipidomics"
+mamba deactivate
+
+# 2) the normalization environment (notebook 3 only: uMAIA needs numpy<2 + jax)
+mamba env create -f environment-umaia.yml
+mamba activate cajal-umaia
+python -m ipykernel install --user --name cajal-umaia --display-name "cajal-umaia"
+mamba deactivate
 ```
 
-**Check**: `python -c "import scanpy, anndata, xgboost; print('ok')"` prints `ok`.
+Most notebooks use the **cajal-lipidomics** kernel; **notebook 3** (uMAIA normalization) uses the
+**cajal-umaia** kernel. EUCLID is not installed here: notebook 6 clones and runs it at that point.
+
+**Check**: with `cajal-lipidomics` active, `python -c "import scanpy, anndata, xgboost, cajal_lipidomics; print('ok')"` prints `ok`.
 
 (Later, during the course, you will refresh the notebooks with `git pull`.)
 

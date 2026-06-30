@@ -38,6 +38,9 @@ def manifest(include_sdf=True):
     for m in ["BrainAtlas/Control_Brains/female/20220416_MouseBrain_female_217D_447x332_Att30_25um/mask.npy",
               "PREGNANT/20240712_MouseBrain_LipidAtlas_Pregnant_Brain1_C2_459x352_25um_Att30/mask.npy"]:
         items.append((f"data/masks/{m}", f"masks/{m}"))
+    # Gene Ontology files for NB8 (goatools): the DAG + mouse gene->term annotations (~80 MB)
+    for g in ["go-basic.obo", "gene2go_mouse"]:
+        items.append((f"data/go/{g}", f"go/{g}"))
     if include_sdf:
         items.append(("data/refs/structures.sdf", "refs/structures.sdf"))
     return items
