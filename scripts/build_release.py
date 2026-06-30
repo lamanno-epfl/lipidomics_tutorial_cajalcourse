@@ -45,10 +45,24 @@ def main():
         if os.path.exists(f"scripts/{s}"):
             shutil.copy(f"scripts/{s}", f"{REL}/scripts/")
 
-    # data manifest (the bundle is downloaded separately, not committed)
+    # data manifest: a STUDENT-facing one (no teacher-only files like maindata_2)
     os.makedirs(f"{REL}/data", exist_ok=True)
-    if os.path.exists("data/README.md"):
-        shutil.copy("data/README.md", f"{REL}/data/")
+    with open(f"{REL}/data/README.md", "w") as fh:
+        fh.write(
+            "# Data\n\n"
+            "The raw MALDI-MSI you pull yourself from METASPACE (project `mlba-2025`) inside notebook 1.\n"
+            "Everything else you build by running the notebooks in order (they save into `data/derived/`).\n\n"
+            "The only things provided for you live in the course data bundle "
+            "(`course_data_bundle.zip`, ~1 GB; download link from the instructor). Unzip it here so the\n"
+            "files land under `data/`:\n\n"
+            "```\nunzip course_data_bundle.zip      # creates data/provided/, data/refs/, data/masks/, ...\n```\n\n"
+            "| file | what it is | used in |\n|---|---|---|\n"
+            "| `provided/registration_ccf.parquet` | Allen CCF coordinate + region per pixel (the registration output; ABBA is taught as a concept) | NB1, NB4 |\n"
+            "| `refs/` | LIPID MAPS / HMDB / LC-MS reference tables for annotation | NB2 |\n"
+            "| `masks/` | tissue masks per section | NB1, NB3 |\n"
+            "| `merfish_plane.parquet` | per-cell MERFISH near the course plane | NB8 |\n"
+            "| `avemerfish_imputed_named.parquet` | region-averaged MERFISH gene expression | NB8 |\n\n"
+            "`data/derived/` (01_raw -> 06_clustered) is produced BY YOU as you run notebooks 1-6, in order.\n")
 
     n_nb = len(glob.glob(f"{REL}/notebooks/**/*.ipynb", recursive=True))
     print(f"release tree at {REL}/ : {n_nb} notebooks (intros + student), helpers, setup, manifest.")

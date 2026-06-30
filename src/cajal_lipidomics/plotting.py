@@ -1,14 +1,14 @@
 """Ready-made, beautiful plotting functions for the course.
 
-Recycled/adapted from the Lipid Brain Atlas so students get publication quality for
-free and spend their effort on interpretation. The spatial-scatter style and the
-cosine optimal-leaf-ordering heatmap sorting are copied faithfully from EUCLID's
-`plotting.py` (the sorting is an art; we do not reinvent it).
+Adapted from the Lipid Brain Atlas / EUCLID so students get publication quality for free and
+spend their effort on interpretation. What is taken VERBATIM from his code: the reciprocal-enrichment
+recipe (001-IDCARDS), the optimal-leaf-ordering heatmap sorting, the per-section 2/98 shared colour
+scale (plot_lipid_distribution), the 8 lipizone colormaps (assign_cluster_colors). What is ADAPTED:
+the 8-colormap assignment to flat Leiden clusters; the group x lipid heatmap normalised to relative
+abundance (his regional-enrichment style, as he requested, not the 0-1 stretch of plot_olosorted).
 
-Conventions for our substrate (`data/sections_pair.h5ad`):
-  adata.X         pixels x lipids (uMAIA-normalized), var_names = lipid names
-  adata.obs       SectionID, Condition, zccf, yccf, lipizone_names, lipizone_color,
-                  acronym, allencolor, division, boundary, ...
+Works on the student-built data/derived chain: adata.X = pixels x ions, var['lipid'] = names,
+adata.obs has SectionID, Condition, x, y, xccf/yccf/zccf, acronym, allencolor, lipizone, lipizone_color.
 """
 from __future__ import annotations
 
