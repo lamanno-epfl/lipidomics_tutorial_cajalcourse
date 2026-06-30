@@ -1,11 +1,8 @@
 # Setup guide — get your laptop ready before the course
 
 Do this at home, with time to spare. None of it needs prior programming. Each step ends with a
-check: if you see the expected output, move on; if not, write to **luca.fusarbassini@epfl.ch** with
-the error, or ask Claude Code once you reach that step.
-
-You need about an hour, plus download time. Works on macOS, Windows, and Linux.
-
+check: if you see the expected output, move on; if not, ask Claude, then write to **luca.fusarbassini@epfl.ch** with
+the error.
 ---
 
 ## 1. A terminal
@@ -36,8 +33,8 @@ the full Anaconda.
 ## 3. Get the course and create the environment
 
 ```bash
-git clone <this repository>
-cd lipidomics_tutorial_cajalcourse
+git clone git@github.com:lamanno-epfl/lipidomics_tutorial_cajalcourse_students.git
+cd lipidomics_tutorial_cajalcourse_students
 
 # 1) the main analysis environment
 mamba env create -f environment.yml
@@ -78,14 +75,14 @@ by running notebooks 1-6 in order.
 
 - Install [VS Code](https://code.visualstudio.com/).
 - In VS Code, open the Extensions panel and install **Python** and **Jupyter** (both by Microsoft).
-- Open the course folder: `File > Open Folder...` and choose `lipidomics_tutorial_cajalcourse`.
+- Open the course folder: `File > Open Folder...` and choose `lipidomics_tutorial_cajalcourse_students`.
 - Open `notebooks/00_intro/00_tooling_student.ipynb`.
 - **Select the kernel**: top right of the notebook, click the kernel picker and choose
-  **cajal-lipidomics**. This is the single most common thing beginners miss.
+  **cajal-lipidomics**. 
 
 **Check**: run the first cell with `Shift`+`Enter`. It runs without an error.
 
-## 5. Claude Code (your AI pair-programmer)
+## 5. Claude Code
 
 We use Claude Code from the second half of the course. Quickstart:
 <https://code.claude.com/docs/en/quickstart>.
