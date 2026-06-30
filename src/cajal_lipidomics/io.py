@@ -3,7 +3,7 @@
 The METASPACE pull is unrolled transparently in notebook 1 (students see
 `results` -> `all_annotation_images` -> stack -> AnnData); this module holds the
 tidy reusable version of that same logic, plus loaders for the provided artifacts
-(the chosen sections, the lifted CCF coordinates from maindata_2, the reference
+(the chosen sections, the reference
 databases).
 
 Planned API (built against real data in M1):
@@ -15,8 +15,8 @@ Planned API (built against real data in M1):
     list_mlba_datasets() -> pandas.DataFrame
         # enumerate the public mlba-2025 project, split control vs pregnant by name
 
-    lift_ccf_from_maindata(section_adata, maindata_path, path_or_sectionid)
-        # join per-pixel xccf/yccf/zccf + Allen acronym/color from maindata_2.parquet
+    attach_provided_ccf(section_adata, registration_path)
+        # join per-pixel xccf/yccf/zccf + Allen acronym/color from the provided registration_ccf.parquet
 """
 from __future__ import annotations
 

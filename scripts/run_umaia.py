@@ -5,7 +5,7 @@ build_umaia_input.py), fits the uMAIA model by MAP/SVI, applies the histogram-ma
 transform, and saves the normalized tensor + fitted parameters. This is the real fit
 students run in notebook 3.
 
-    /home/fusar/mambaforge/envs/cajal-umaia/bin/python scripts/run_umaia.py
+    JAX_PLATFORMS=cpu python scripts/run_umaia.py
 """
 from __future__ import annotations
 
