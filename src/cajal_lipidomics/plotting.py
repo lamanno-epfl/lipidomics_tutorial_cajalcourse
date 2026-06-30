@@ -35,27 +35,39 @@ def distinct_colors(n):
     return out
 
 
-def lipizone_colors(adata, key="lipizone", rep="X_nmf"):
-    """Assign each cluster a colour so molecularly similar clusters get adjacent colours.
+LIPIZONE_COLORMAPS = ["RdYlBu", "terrain", "PiYG", "cividis", "plasma", "PuRd", "inferno", "PuOr"]
 
-    Orders clusters by hierarchical leaf-ordering on their centroid cosine distance (the
-    Lipid Brain Atlas idea), then maps that order to a distinct palette, so the spatial map
-    reads as a smooth, coherent anatomy rather than random confetti. Returns {label: hex}.
+
+def lipizone_colors(adata, key="lipizone", rep="X_nmf", n_families=8):
+    """Colour lipizones with the Lipid Brain Atlas 8-colormap scheme (EUCLID `assign_cluster_colors`).
+
+    Lipizones are grouped into up to 8 families by the similarity of their molecular centroids; each
+    family is given one of 8 colormaps (RdYlBu, terrain, PiYG, cividis, plasma, PuRd, inferno, PuOr),
+    and members within a family are shaded along that colormap in similarity order. So sibling
+    lipizones share a colour family and the section reads as coherent anatomy. Returns {str(label): hex}.
     """
-    from scipy.cluster.hierarchy import linkage, leaves_list
-    from scipy.spatial.distance import squareform
-    from sklearn.metrics.pairwise import cosine_similarity
-    labels = adata.obs[key].astype(str)
-    cats = sorted(labels.unique())
+    import matplotlib.cm as cm
+    from scipy.cluster.hierarchy import linkage, leaves_list, fcluster
+    from scipy.spatial.distance import pdist
+    labels = adata.obs[key].astype(str).to_numpy()
+    cats = sorted(pd.unique(labels))
+    if len(cats) <= 1:
+        return {c: "#777777" for c in cats}
     Z = adata.obsm[rep] if rep in adata.obsm else np.asarray(adata.X)
-    cent = np.vstack([Z[(labels == c).to_numpy()].mean(0) for c in cats])
-    if len(cats) > 2:
-        d = squareform(1 - cosine_similarity(cent), checks=False)
-        order = leaves_list(linkage(d, method="average", optimal_ordering=True))
-    else:
-        order = np.arange(len(cats))
-    pal = distinct_colors(len(cats))
-    return {cats[order[i]]: pal[i] for i in range(len(cats))}
+    cent = np.vstack([Z[labels == c].mean(0) for c in cats])
+    link = linkage(pdist(cent), method="average", optimal_ordering=True)
+    nfam = int(min(n_families, len(cats)))
+    fam = fcluster(link, t=nfam, criterion="maxclust")          # family id per lipizone
+    order = list(leaves_list(link))                             # global similarity order
+    out = {}
+    for fi, f in enumerate(sorted(np.unique(fam))):
+        members = [cats[i] for i in order if fam[i] == f]        # this family, in similarity order
+        cmap = cm.get_cmap(LIPIZONE_COLORMAPS[fi % len(LIPIZONE_COLORMAPS)])
+        for j, m in enumerate(members):
+            frac = 0.15 + 0.70 * (j / max(len(members) - 1, 1))  # stay off the colormap's extremes
+            r, g, b, _ = cmap(frac)
+            out[m] = "#%02x%02x%02x" % (int(255 * r), int(255 * g), int(255 * b))
+    return out
 
 
 def _lipid_vector(adata, lipid: str) -> np.ndarray:
@@ -143,62 +155,43 @@ def spatial_categorical(adata, color_key="lipizone_color", section_key="SectionI
     return axes
 
 
-def sorted_lipid_heatmap(adata, group_key, mask=None, cmap="Reds", figsize=(18, 10),
-                         max_labels=60, title=None, ax=None):
-    """Group-mean lipid heatmap with rows AND columns cosine optimal-leaf-ordered.
+def sorted_lipid_heatmap(adata, group_key, mask=None, cmap="Reds", figsize=(20, 9),
+                         name_key="lipid", title=None, ax=None):
+    """Group x lipid heatmap of RELATIVE abundance, rows and columns cosine optimal-leaf-ordered.
 
-    Copied faithfully from EUCLID `plot_olosorted_lipid_lipizone`: per-lipid 0-1
-    normalize, average by `group_key` (e.g. 'acronym' for anatomy x lipid, or
-    'lipizone_names' for lipizone x lipid), then order both axes by hierarchical
-    clustering on cosine distance with optimal leaf ordering. The sorting is the art.
+    The value shown is each lipid's group-mean divided by its grand mean, so 1 = the lipid's
+    average level, 2 = twice it, 0.5 = half. This is the meaningful, eyeballable scaling the Lipid
+    Brain Atlas uses (a plain 0-1 stretch wastes the colour range on noise). Columns are LABELLED
+    with lipid names (from `adata.var[name_key]`, falling back to var_names). Average by `group_key`
+    (e.g. 'acronym' for anatomy x lipid, 'lipizone' for lipizone x lipid); both axes ordered by
+    optimal leaf ordering on cosine distance. Colour limits are the 2nd/98th percentiles.
     """
-    obs = adata.obs if mask is None else adata.obs[mask]
-    X = adata.X if mask is None else adata.X[np.asarray(mask)]
-    X = np.asarray(X)
-    # per-lipid 0-1 normalization (column-wise)
-    cmin = X.min(0)
-    rng = X.max(0) - cmin
-    rng[rng == 0] = 1.0
-    norm = (X - cmin) / rng
-    df = pd.DataFrame(norm, columns=list(adata.var_names))
+    obs = adata.obs if mask is None else adata.obs[np.asarray(mask)]
+    X = np.asarray(adata.X if mask is None else adata.X[np.asarray(mask)])
+    names = list(adata.var[name_key]) if (name_key in adata.var) else list(adata.var_names)
+    df = pd.DataFrame(X, columns=names)
     df[group_key] = obs[group_key].to_numpy()
     df = df.dropna(subset=[group_key])
     avg = df.groupby(group_key, observed=True).mean()
+    rel = avg / (avg.mean(0) + 1e-12)                           # relative abundance per lipid
 
-    # cosine distance + optimal leaf ordering on both axes (verbatim recipe).
-    # clip at 0: identical rows can yield a tiny negative distance from float error,
-    # which scipy's strict optimal_ordering check would otherwise reject.
-    row_d = squareform(np.clip(1 - cosine_similarity(avg.values), 0, None), checks=False)
-    col_d = squareform(np.clip(1 - cosine_similarity(avg.values.T), 0, None), checks=False)
+    row_d = squareform(np.clip(1 - cosine_similarity(rel.values), 0, None), checks=False)
+    col_d = squareform(np.clip(1 - cosine_similarity(rel.values.T), 0, None), checks=False)
     row_order = leaves_list(linkage(row_d, method="average", optimal_ordering=True))
     col_order = leaves_list(linkage(col_d, method="average", optimal_ordering=True))
-    sorted_df = avg.iloc[row_order, col_order]
+    sorted_df = rel.iloc[row_order, col_order]
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
-    im = ax.imshow(sorted_df.values, aspect="auto", cmap=cmap, vmin=0, vmax=1)
-    # show a readable subset of labels when there are many rows
-    rows = sorted_df.index.to_list()
-    if len(rows) > max_labels:
-        step = max(1, len(rows) // max_labels)
-        ax.set_yticks(range(0, len(rows), step))
-        ax.set_yticklabels(rows[::step], fontsize=FS["xs"])
-    else:
-        ax.set_yticks(range(len(rows)))
-        ax.set_yticklabels(rows, fontsize=FS["xs"])
-    cols = sorted_df.columns.to_list()
-    if len(cols) > max_labels:
-        step = max(1, len(cols) // max_labels)
-        ax.set_xticks(range(0, len(cols), step))
-        ax.set_xticklabels(cols[::step], rotation=90, fontsize=FS["xs"])
-    else:
-        ax.set_xticks(range(len(cols)))
-        ax.set_xticklabels(cols, rotation=90, fontsize=FS["xs"])
-    ax.set_xlabel("lipids")
-    ax.set_ylabel(group_key)
+    vmin, vmax = np.percentile(sorted_df.values, [2, 98])
+    im = ax.imshow(sorted_df.values, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+    rows, cols = sorted_df.index.to_list(), sorted_df.columns.to_list()
+    ax.set_yticks(range(len(rows))); ax.set_yticklabels(rows, fontsize=FS["xs"])
+    ax.set_xticks(range(len(cols))); ax.set_xticklabels(cols, rotation=90, fontsize=max(4, FS["xs"] - 2))
+    ax.set_xlabel("lipid"); ax.set_ylabel(group_key)
     if title:
         ax.set_title(title, fontsize=FS["m"])
-    lightweight_colorbar(im, ax, label="0-1 intensity")
+    lightweight_colorbar(im, ax, label="relative abundance (group mean / grand mean)")
     return ax, sorted_df
 
 
@@ -267,20 +260,25 @@ def rgb_overlay(adata, lipids, section_key="SectionID", layer=None, x="x", y="y"
     return axes
 
 
-def lipid_lipid_corr(adata, layer=None, ax=None, cmap="RdBu_r"):
+def lipid_lipid_corr(adata, layer=None, ax=None, cmap="RdBu_r", name_key="lipid", figsize=(16, 15)):
     """Lipid-lipid correlation heatmap, rows/cols cosine optimal-leaf-ordered so co-varying lipids
-    sit together. Reveals the molecular modules NMF will later summarise."""
+    sit together, LABELLED with lipid names on both axes (a tiny unlabelled heatmap is useless).
+    Reveals the molecular modules NMF will later summarise."""
     X = adata.layers[layer] if layer else np.asarray(adata.X)
-    C = np.corrcoef(X.T); C = np.nan_to_num(C)
+    names = list(adata.var[name_key]) if (name_key in adata.var) else list(adata.var_names)
+    C = np.nan_to_num(np.corrcoef(X.T))
     d = squareform(1 - np.abs(C), checks=False)
     order = leaves_list(linkage(d, method="average", optimal_ordering=True))
     Cs = C[np.ix_(order, order)]
+    labels = [names[i] for i in order]
     if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 6))
-    im = ax.imshow(Cs, cmap=cmap, vmin=-1, vmax=1); ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title("lipid-lipid correlation (clustered)", fontsize=FS["m"])
+        fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(Cs, cmap=cmap, vmin=-1, vmax=1)
+    ax.set_xticks(range(len(labels))); ax.set_xticklabels(labels, rotation=90, fontsize=max(4, FS["xs"] - 2))
+    ax.set_yticks(range(len(labels))); ax.set_yticklabels(labels, fontsize=max(4, FS["xs"] - 2))
+    ax.set_title("lipid-lipid correlation (clustered, labelled)", fontsize=FS["m"])
     lightweight_colorbar(im, ax, label="Pearson r")
-    return ax, [list(adata.var_names)[i] for i in order]
+    return ax, labels
 
 
 def cluster_size_hist(labels, ax=None):
@@ -343,3 +341,86 @@ def marker_barplot(adata, mask, layer=None, lipid_props=None, top=20, ax=None, t
     ax.barh(range(len(s))[::-1], s.values, color=colors or "#4477aa", height=0.7)
     ax.set_yticks(range(len(s))[::-1]); ax.set_yticklabels(s.index, fontsize=FS["xs"])
     ax.set_xlabel("log2 fold change vs rest"); ax.set_title(title, fontsize=FS["m"]); return ax
+
+
+def mosaic(adata, lipizone_color_key="lipizone_color", section_key="SectionID", section=None,
+           xlim=None, ylim=None, x="x", y="y", point_size=12, ax=None, title=None):
+    """Zoom into a region of interest and read the lipizone mosaic there (EUCLID plot_mosaic idea).
+
+    Crops one section to a bounding box (xlim, ylim in pixel coords) and paints each pixel by its
+    lipizone colour, with large points, so students can inspect how lipizones tile a chosen region.
+    If no box is given it shows the whole section. Black background, like the atlas mosaic.
+    """
+    obs = adata.obs
+    sid = section if section is not None else sorted(obs[section_key].unique())[0]
+    m = (obs[section_key] == sid).to_numpy()
+    sub = obs[m]
+    if xlim is not None:
+        sub = sub[(sub[x] >= xlim[0]) & (sub[x] <= xlim[1])]
+    if ylim is not None:
+        sub = sub[(sub[y] >= ylim[0]) & (sub[y] <= ylim[1])]
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 7)); fig.set_facecolor("black")
+    ax.set_facecolor("black")
+    ax.scatter(sub[x], -sub[y], c=sub[lipizone_color_key], s=point_size, marker="s", rasterized=True)
+    ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(title or f"lipizone mosaic (section {sid})", color="white", fontsize=FS["m"])
+    return ax
+
+
+def highlight_lipizone(adata, lipizone, key="lipizone", section_key="SectionID",
+                       x="x", y="y", point_size=4, axes=None):
+    """Highlight ONE lipizone in red over a grey cast of all tissue, per section. The way to reason
+    about a single object in spatial omics: where, exactly, does this one territory sit?"""
+    obs = adata.obs
+    secs = sorted(obs[section_key].unique())
+    if axes is None:
+        fig, axes = plt.subplots(1, len(secs), figsize=(4.2 * len(secs), 3.6), squeeze=False); axes = axes.ravel()
+    target = obs[key].astype(str) == str(lipizone)
+    for ax, sname in zip(axes, secs):
+        m = (obs[section_key] == sname).to_numpy()
+        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c="0.85", s=point_size, rasterized=True)
+        hit = m & target.to_numpy()
+        ax.scatter(obs.loc[hit, x], -obs.loc[hit, y], c="red", s=point_size, rasterized=True)
+        spatial_axes(ax)
+        ax.set_title(obs.loc[m, "Condition"].iloc[0] if "Condition" in obs else str(sname), fontsize=FS["m"])
+    axes[0].set_ylabel(f"lipizone {lipizone}", fontsize=FS["s"])
+    return axes
+
+
+def lipizone_hierarchy_levels(adata, key="lipizone", rep="X_nmf", max_level=4):
+    """Build a binary hierarchy over lipizones from their centroids and return, for each pixel, its
+    ancestor group at levels 1..max_level (a divisive tree cut at 2, 4, 8, ... groups). Lets you show
+    the split progressively instead of jumping to the terminal leaves."""
+    from scipy.cluster.hierarchy import linkage, fcluster
+    from scipy.spatial.distance import pdist
+    labels = adata.obs[key].astype(str).to_numpy()
+    cats = sorted(pd.unique(labels))
+    Z = adata.obsm[rep] if rep in adata.obsm else np.asarray(adata.X)
+    cent = np.vstack([Z[labels == c].mean(0) for c in cats])
+    link = linkage(pdist(cent), method="average", optimal_ordering=True)
+    out = {}
+    for L in range(1, max_level + 1):
+        grp = fcluster(link, t=min(2 ** L, len(cats)), criterion="maxclust")  # lipizone -> group id
+        lut = dict(zip(cats, grp))
+        out[f"level_{L}"] = pd.Series(labels, index=adata.obs_names).map(lut).astype(int)
+    return pd.DataFrame(out, index=adata.obs_names)
+
+
+def plot_hierarchy_levels(adata, levels_df, color_key="lipizone_color", section_key="SectionID",
+                          x="x", y="y", section=None, point_size=4):
+    """Show the lipizone hierarchy split by split: at each level a pixel takes the MODAL lipizone
+    colour of its group, so you see 2 colours, then 4, then 8 ... (EUCLID's progressive-splitting view)."""
+    obs = adata.obs
+    sid = section if section is not None else sorted(obs[section_key].unique())[0]
+    m = (obs[section_key] == sid).to_numpy()
+    cols = list(levels_df.columns)
+    fig, axes = plt.subplots(1, len(cols), figsize=(3.8 * len(cols), 3.8), squeeze=False); axes = axes.ravel()
+    base = obs[color_key].astype(str)
+    for ax, lv in zip(axes, cols):
+        modal = base.groupby(levels_df[lv]).agg(lambda s: s.mode().iloc[0] if len(s.mode()) else "#999999")
+        pix_color = levels_df[lv].map(modal)
+        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c=pix_color[m].to_numpy(), s=point_size, rasterized=True)
+        ax.set_aspect("equal"); ax.axis("off")
+        ax.set_title(f"{lv}: {levels_df[lv][m].nunique()} groups", fontsize=FS["s"])
+    return axes
