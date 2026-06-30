@@ -142,7 +142,8 @@ def reciprocal_enrichment(row_labels, col_labels):
     enrichment of a column-category within a row-category = (its fraction in that row) divided by
     its mean fraction across rows. We compute it both ways (cols-in-rows and rows-in-cols) and
     multiply, so a pair scores high only if EACH is enriched in the other. Returns a (rows x cols)
-    DataFrame of enrichment scores (use log for display, since they span orders of magnitude).
+    DataFrame of enrichment scores. Display it raw with vmin/vmax at the 2nd/98th percentiles (the LBA
+    convention), never on a log scale.
     """
     r, c = pd.Series(np.asarray(row_labels)), pd.Series(np.asarray(col_labels))
     c1 = pd.crosstab(r, c)                       # (rows, cols)
