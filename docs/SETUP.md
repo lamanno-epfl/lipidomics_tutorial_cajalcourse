@@ -61,6 +61,19 @@ Most notebooks use the **cajal-lipidomics** kernel; **notebook 3** (uMAIA normal
 
 (Later, during the course, you will refresh the notebooks with `git pull`.)
 
+## 3b. Get the data bundle
+
+The provided inputs (registration, references, masks, MERFISH, Gene Ontology) live in one
+~1 GB bundle on Zenodo. With `cajal-lipidomics` active, from the repo root:
+
+```bash
+python scripts/fetch_data_bundle.py    # downloads + unzips into data/
+```
+
+You pull the raw MALDI-MSI yourself from METASPACE in notebook 1, and build `data/derived/`
+by running notebooks 1-6 in order.
+
+
 ## 4. VS Code and Jupyter
 
 - Install [VS Code](https://code.visualstudio.com/).

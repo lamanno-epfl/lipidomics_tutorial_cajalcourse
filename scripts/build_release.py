@@ -41,7 +41,7 @@ def main():
 
     # the scripts students run (fetch data, build uMAIA input); NOT make_student/build_release/destyle
     os.makedirs(f"{REL}/scripts", exist_ok=True)
-    for s in ["fetch_references.py", "build_umaia_input.py", "run_umaia.py", "move_to_mnt.py"]:
+    for s in ["fetch_data_bundle.py", "fetch_references.py", "build_umaia_input.py", "run_umaia.py", "move_to_mnt.py"]:
         if os.path.exists(f"scripts/{s}"):
             shutil.copy(f"scripts/{s}", f"{REL}/scripts/")
 
@@ -53,9 +53,8 @@ def main():
             "The raw MALDI-MSI you pull yourself from METASPACE (project `mlba-2025`) inside notebook 1.\n"
             "Everything else you build by running the notebooks in order (they save into `data/derived/`).\n\n"
             "The only things provided for you live in the course data bundle "
-            "(`course_data_bundle.zip`, ~1 GB; download link from the instructor). Unzip it here so the\n"
-            "files land under `data/`:\n\n"
-            "```\nunzip course_data_bundle.zip      # creates data/provided/, data/refs/, data/masks/, ...\n```\n\n"
+            "(`course_data_bundle.zip`, ~1 GB on Zenodo). Fetch + unzip it in one step:\n\n"
+            "```\npython scripts/fetch_data_bundle.py      # downloads from Zenodo, unzips into data/\n```\n\n"
             "| file | what it is | used in |\n|---|---|---|\n"
             "| `provided/registration_ccf.parquet` | Allen CCF coordinate + region per pixel (the registration output; ABBA is taught as a concept) | NB1, NB4 |\n"
             "| `refs/` | LIPID MAPS / HMDB / LC-MS reference tables for annotation | NB2 |\n"
