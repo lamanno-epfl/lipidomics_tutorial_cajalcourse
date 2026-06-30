@@ -47,6 +47,9 @@ mamba deactivate
 # 2) the normalization environment (notebook 3 only: uMAIA needs numpy<2 + jax)
 mamba env create -f environment-umaia.yml
 mamba activate cajal-umaia
+pip install -e . --no-deps                              # the cajal_lipidomics helper (NB3 imports it)
+git clone https://github.com/lamanno-epfl/uMAIA.git external/uMAIA
+pip install -e external/uMAIA --no-deps                 # uMAIA itself (kept off the pinned stack)
 python -m ipykernel install --user --name cajal-umaia --display-name "cajal-umaia"
 mamba deactivate
 ```
@@ -55,6 +58,7 @@ Most notebooks use the **cajal-lipidomics** kernel; **notebook 3** (uMAIA normal
 **cajal-umaia** kernel. EUCLID is not installed here: notebook 6 clones and runs it at that point.
 
 **Check**: with `cajal-lipidomics` active, `python -c "import scanpy, anndata, xgboost, cajal_lipidomics; print('ok')"` prints `ok`.
+And with `cajal-umaia` active, `python -c "import uMAIA, cajal_lipidomics; print('ok')"` prints `ok`.
 
 (Later, during the course, you will refresh the notebooks with `git pull`.)
 
@@ -76,11 +80,20 @@ by running notebooks 1-6 in order.
 - Install [VS Code](https://code.visualstudio.com/).
 - In VS Code, open the Extensions panel and install **Python** and **Jupyter** (both by Microsoft).
 - Open the course folder: `File > Open Folder...` and choose `lipidomics_tutorial_cajalcourse_students`.
-- Open `notebooks/00_intro/00_tooling_student.ipynb`.
+- Open `notebooks/00_intro/00_tooling.ipynb`.
 - **Select the kernel**: top right of the notebook, click the kernel picker and choose
-  **cajal-lipidomics**. 
+  **cajal-lipidomics**. The picker shows two groups — registered "Jupyter Kernels" and raw
+  "Python Environments". Pick the one named **cajal-lipidomics** (Python 3.11), **not** `base`.
 
 **Check**: run the first cell with `Shift`+`Enter`. It runs without an error.
+
+> **If you get `ModuleNotFoundError` (e.g. no `scanpy`/`seaborn`) the kernel is almost always
+> wrong, not the install.** The error traceback shows the Python that ran: a path under
+> `anaconda3/lib/python3.10/...` means you are on the **base** environment, not the course one
+> (which is `anaconda3/envs/cajal-lipidomics/.../python3.11`). VS Code's *Restart* only restarts
+> the kernel you already picked, so it keeps coming back — you must actively **re-pick**
+> cajal-lipidomics from the kernel picker. To confirm, run `import sys; print(sys.executable)`:
+> it must end in `envs/cajal-lipidomics/bin/python`.
 
 ## 5. Claude Code
 

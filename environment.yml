@@ -20,16 +20,21 @@ dependencies:
   - ipykernel
   - ipywidgets
   - nbformat
-  # scientific stack (everything the notebooks import)
-  - numpy
-  - scipy
-  - pandas
+  # scientific stack (everything the notebooks import).
+  # These are CAPPED on purpose. Left unpinned, a 2026 conda-forge solve pulls
+  # numpy 2.4 / pandas 3.0, then — unable to satisfy a recent scanpy against those —
+  # backtracks scanpy to 1.4.4 (2019) and anndata to 0.6.x, which crash on import
+  # (`from pandas.core.index import RangeIndex`). The caps below pin the same
+  # known-good modern stack as environment-umaia.yml and keep scanpy/anndata current.
+  - "numpy<2"
+  - "scipy<1.13"
+  - "pandas<2.2"
   - scikit-learn
   - matplotlib
   - seaborn
   - statsmodels
-  - anndata
-  - scanpy
+  - "anndata>=0.10"
+  - "scanpy>=1.10"
   - harmonypy
   - leidenalg
   - python-igraph
@@ -37,6 +42,7 @@ dependencies:
   - umap-learn
   - xgboost
   - numba
+  - pyarrow            # pandas parquet engine (NB1/NB8/NB9 + the data bundle ship .parquet)
   - zarr
   - rdkit
   - adjusttext

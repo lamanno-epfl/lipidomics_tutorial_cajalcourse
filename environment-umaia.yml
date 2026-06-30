@@ -23,6 +23,7 @@ dependencies:
   - "scipy<1.13"
   - "pandas<2.2"
   - scikit-learn
+  - statsmodels        # cajal_lipidomics.analysis (used by NB3) does BH correction via statsmodels
   - "scikit-image<0.23"
   - "jax>=0.4.20,<0.4.27"
   - "jaxlib>=0.4.20,<0.4.27"
@@ -46,3 +47,7 @@ dependencies:
       - pyimzML
       - funsor
       - "opencv-python-headless<4.10"
+      # uMAIA's package __init__ imports its molecule_matching submodule, which `import gurobipy`.
+      # The import alone needs no licence (only solving does); NB3 uses only the JAX-based
+      # uMAIA.norm, so this just satisfies the import. Installed --no-deps with uMAIA otherwise.
+      - "gurobipy"

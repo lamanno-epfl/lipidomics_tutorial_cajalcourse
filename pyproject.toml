@@ -8,9 +8,9 @@ version = "0.0.1"
 description = "Helpers for the CAJAL spatial-metabolomics course (style, plotting, IO, analysis)."
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "pandas",
-    "scipy",
+    "numpy<2",
+    "pandas<2.2",
+    "scipy<1.13",
     "scikit-learn",
     "matplotlib",
     "seaborn",

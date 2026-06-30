@@ -46,7 +46,7 @@ def lipizone_colors(adata, key="lipizone", rep="X_nmf", n_families=8):
     and members within a family are shaded along that colormap in similarity order. So sibling
     lipizones share a colour family and the section reads as coherent anatomy. Returns {str(label): hex}.
     """
-    import matplotlib.cm as cm
+    import matplotlib as mpl
     from scipy.cluster.hierarchy import linkage, leaves_list, fcluster
     from scipy.spatial.distance import pdist
     labels = adata.obs[key].astype(str).to_numpy()
@@ -62,7 +62,7 @@ def lipizone_colors(adata, key="lipizone", rep="X_nmf", n_families=8):
     out = {}
     for fi, f in enumerate(sorted(np.unique(fam))):
         members = [cats[i] for i in order if fam[i] == f]        # this family, in similarity order
-        cmap = cm.get_cmap(LIPIZONE_COLORMAPS[fi % len(LIPIZONE_COLORMAPS)])
+        cmap = mpl.colormaps[LIPIZONE_COLORMAPS[fi % len(LIPIZONE_COLORMAPS)]]  # mpl>=3.9: cm.get_cmap removed
         for j, m in enumerate(members):
             frac = 0.15 + 0.70 * (j / max(len(members) - 1, 1))  # stay off the colormap's extremes
             r, g, b, _ = cmap(frac)
