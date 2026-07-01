@@ -56,15 +56,27 @@ def gene_programs(genes_df, n_programs=20, random_state=42):
     return W, model.components_, model
 
 
-def predict_changes(W_programs, change_df, region_index, test_size=0.25, random_state=42):
-    """One XGBoost regressor per lipid: predict its per-region change from gene programs.
+def predict_changes(genes_df, change_df, n_programs=20, test_size=0.25, random_state=42):
+    """One XGBoost regressor per lipid: predict its per-region change from gene programs, with NO
+    leakage. The whole feature pipeline (MinMax -> NMF gene programs -> StandardScaler) is fit on the
+    TRAINING regions only and then applied to the held-out regions, so the test regions never shape
+    the programs or the scaling they are scored on. Then one XGBoost per lipid is trained on the
+    training regions and scored on the held-out regions.
 
-    Returns a per-lipid table (test Pearson r) and the mean |SHAP| program-importance
-    matrix (programs x lipids), computed with XGBoost's exact TreeSHAP (pred_contribs).
+    Returns: scores (per-lipid held-out Pearson r), shap_mat (mean |SHAP| program-importance,
+    programs x lipids, via XGBoost's exact TreeSHAP), W (regions x programs, test via the train-fit
+    NMF), H (programs x genes), the fitted NMF model, and the train/test region index arrays. The
+    programs (W, H) are the leak-free ones, so downstream SHAP/GO interpret exactly what was scored.
     """
-    Wz = StandardScaler().fit_transform(W_programs)
-    idx = np.arange(Wz.shape[0])
+    idx = np.arange(len(genes_df))
     tr, te = train_test_split(idx, test_size=test_size, random_state=random_state)
+    mm = MinMaxScaler().fit(genes_df.values[tr])           # gene scaler: TRAIN regions only
+    Xg = np.clip(mm.transform(genes_df.values), 0, 1)      # held-out regions clip into the train range (NMF needs >=0)
+    nmf = NMF(n_components=n_programs, init="nndsvda", random_state=random_state, max_iter=500)
+    nmf.fit(Xg[tr])                                        # NMF programs: TRAIN regions only
+    W = nmf.transform(Xg)                                  # apply to all regions (test = train-fit model)
+    H = nmf.components_
+    Wz = StandardScaler().fit(W[tr]).transform(W)          # z-score: TRAIN regions only
     n_prog = Wz.shape[1]
     rows, shap_cols = [], {}
     for lipid in change_df.columns:
@@ -80,7 +92,7 @@ def predict_changes(W_programs, change_df, region_index, test_size=0.25, random_
         shap_cols[lipid] = np.abs(contribs).mean(0)  # mean |SHAP| per program
     scores = pd.DataFrame(rows, columns=["lipid", "test_r"]).sort_values("test_r", ascending=False)
     shap_mat = pd.DataFrame(shap_cols, index=[f"program{j+1}" for j in range(n_prog)])
-    return scores, shap_mat
+    return scores, shap_mat, W, H, nmf, tr, te
 
 
 # ---- per-pixel integration via shared CCF coordinates (per-cell MERFISH) ----

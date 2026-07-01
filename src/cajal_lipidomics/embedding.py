@@ -12,25 +12,11 @@ import pandas as pd
 from sklearn.decomposition import NMF
 
 
-def nmf_embeddings(X, n_factors=15, random_state=42, max_iter=400):
-    """Factor X ~ W H with all entries non-negative (NMF), giving `n_factors` parts-based
-    lipid programs. `init='nndsvda'` is deterministic and standard. W (pixels x factors)
-    is the per-pixel program activity; H (factors x lipids) is each program's lipid loadings.
-
-    Returns W, H, the fitted model.
-    """
-    X = np.asarray(X, float)
-    Xpos = X - X.min() + 1e-7  # NMF requires non-negative input
-    model = NMF(n_components=n_factors, init="nndsvda", random_state=random_state, max_iter=max_iter)
-    W = model.fit_transform(Xpos)
-    return W, model.components_, model
-
-
 def seeded_nmf(X, n_factors=15, random_state=42, max_iter=400):
     """NMF with a correlation-informed initialization (the LBA idea, made robust): group
     the lipids into `n_factors` clusters by their correlation, take the most central lipid
-    of each cluster as a seed program, and initialize W/H from those. Same output as
-    `nmf_embeddings` but with an interpretable, seeded start.
+    of each cluster as a seed program, and initialize W/H from those. Same output shape as
+    plain NMF but with an interpretable, seeded start.
     """
     from sklearn.cluster import AgglomerativeClustering
     X = np.asarray(X, float)

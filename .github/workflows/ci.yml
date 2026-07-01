@@ -1,0 +1,52 @@
+name: envs
+
+# Automated "does the environment still build?" check — the thing we cannot easily test on our
+# own Windows machines. Both course envs are solved from the committed yml files on Ubuntu (which is
+# what WSL2 gives Windows students, and what Mac/Linux students use), then a plain import smoke test
+# is run. This catches environment drift (e.g. a conda-forge update silently pulling an incompatible
+# scanpy/anndata) before a student ever hits it. Notebook execution is NOT run here — it needs the
+# ~1 GB data bundle — so this is an env/build guard, not a full pipeline test.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-envs:
+    name: build + import (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: cajal-lipidomics
+            file: environment.yml
+          - env: cajal-umaia
+            file: environment-umaia.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: create the env from its yml
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: ${{ matrix.file }}
+          cache-environment: true
+
+      - name: main env — install helper + import everything the notebooks use
+        if: matrix.env == 'cajal-lipidomics'
+        shell: bash -el {0}
+        run: |
+          pip install -e .
+          python -c "import numpy; import pandas; print('numpy', numpy.__version__, 'pandas', pandas.__version__)"
+          python -c "import scanpy, anndata, xgboost, seaborn, harmonypy, leidenalg, igraph, openTSNE, umap, statsmodels, rdkit, shap, goatools, metaspace, pyarrow, cajal_lipidomics; from anndata import AnnData; import numpy as np; AnnData(np.zeros((2,2))); print('main env OK')"
+
+      - name: umaia env — install helper + uMAIA + import
+        if: matrix.env == 'cajal-umaia'
+        shell: bash -el {0}
+        run: |
+          pip install -e . --no-deps
+          git clone --depth 1 https://github.com/lamanno-epfl/uMAIA.git external/uMAIA
+          pip install -e external/uMAIA --no-deps
+          python -c "import uMAIA, cajal_lipidomics, jax, numpyro; print('umaia env OK')"

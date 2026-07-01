@@ -1,0 +1,16 @@
+# Normalise line endings to LF everywhere, so WSL2 / Linux / macOS and any Windows editor agree.
+# Prevents CRLF sneaking into scripts and shell files (which breaks them on Linux/WSL2).
+* text=auto eol=lf
+
+# Treat known binaries as binary (never touch their bytes).
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gz     binary
+*.zip    binary
+*.tar    binary
+*.h5ad   binary
+*.parquet binary
+*.nrrd   binary
+*.tif    binary
+*.tiff   binary

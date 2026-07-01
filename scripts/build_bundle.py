@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import sys
 import zipfile
-import numpy as np
 import pyarrow.parquet as pq
 import pyarrow.compute as pc
 

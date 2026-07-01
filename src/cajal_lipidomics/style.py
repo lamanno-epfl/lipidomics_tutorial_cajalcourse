@@ -18,8 +18,7 @@ import matplotlib.pyplot as plt
 # Four standardised font sizes (very small / small / medium / large).
 FS = {"xs": 6, "s": 8, "m": 10, "l": 13}
 
-# Divergent default for signed data (log2FC, z-scores); sequential for intensities.
-CMAP_DIVERGENT = "RdBu_r"
+# Sequential default for intensities.
 CMAP_SEQUENTIAL = "plasma"
 
 

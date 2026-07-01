@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore"); logging.getLogger("harmonypy").setLevel(loggi
 sys.path.insert(0, "src")
 import numpy as np, pandas as pd, anndata as ad
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-from cajal_lipidomics import analysis as A, embedding as E, annotation as AN, plotting as P
+from cajal_lipidomics import analysis as A, embedding as E, annotation as AN
 from cajal_lipidomics.style import set_style; set_style()
 
 os.makedirs("data/derived", exist_ok=True); os.makedirs("data/figs/v2", exist_ok=True)

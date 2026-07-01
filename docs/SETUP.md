@@ -3,6 +3,19 @@
 Do this at home, with time to spare. None of it needs prior programming. Each step ends with a
 check: if you see the expected output, move on; if not, ask Claude, then write to **luca.fusarbassini@epfl.ch** with
 the error.
+
+> **On Windows? Use WSL2.** One step of the course — notebook 3's uMAIA normalization — needs JAX,
+> and conda cannot install JAX on native Windows (there is no Windows build of `jaxlib`). The clean
+> fix is **WSL2**: a real Ubuntu Linux that runs inside Windows, where every command in this guide
+> works exactly as written for Mac and Linux. Set it up once, then do the *whole* guide inside it:
+>
+> 1. Open **PowerShell as Administrator**, run `wsl --install`, and reboot. (Installs WSL2 + Ubuntu.)
+> 2. Launch **Ubuntu** from the Start menu and pick a username and password. That window is your terminal.
+> 3. Keep the course under your Linux home (run `cd ~` first), not under `/mnt/c/...` — it is much faster.
+> 4. For VS Code (step 4), install the **WSL** extension, then from the Ubuntu terminal run `code .`
+>    in the course folder; VS Code reopens "connected to WSL" and sees the `cajal-lipidomics` kernel.
+>
+> From here on, Windows + WSL2 users follow the **macOS / Linux** instructions everywhere.
 ---
 
 ## 1. A terminal
@@ -10,9 +23,9 @@ the error.
 The terminal is a text window where you type commands. You already have one.
 
 - **macOS**: open Spotlight (`Cmd`+`Space`), type `Terminal`, press Enter.
-- **Windows**: install [Git for Windows](https://git-scm.com/download/win) (accept the defaults).
-  This gives you **Git Bash**, a terminal that understands the same commands as Mac and Linux. Use
-  Git Bash throughout this course, not PowerShell.
+- **Windows**: use **WSL2** (see the box above), then open the **Ubuntu** terminal and follow the
+  macOS / Linux commands throughout. Native Git Bash / PowerShell will not run notebook 3, so we
+  only support the WSL2 path.
 - **Linux**: open your Terminal app.
 
 **Check**: type `pwd` and press Enter. It prints the folder you are in.
@@ -24,8 +37,8 @@ the full Anaconda.
 
 - Download the installer for your system from <https://github.com/conda-forge/miniforge>.
   - macOS / Linux: download the `.sh`, then run `bash Miniforge3-*.sh` and accept the defaults.
-  - Windows: download the `.exe`, double-click, accept the defaults. Afterwards use the
-    **Miniforge Prompt** (or Git Bash) as your terminal.
+  - Windows (WSL2): inside the **Ubuntu** terminal, use the **Linux** `.sh` installer exactly as the
+    macOS / Linux line above — not the Windows `.exe`.
 - Close and reopen the terminal.
 
 **Check**: `mamba --version` prints a version number.

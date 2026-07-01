@@ -2,8 +2,8 @@
 
 It holds the "ready" pieces we hand students so they spend their attention on the
 science, not boilerplate: a consistent figure style (`style`), beautiful plotting
-functions recycled from the Lipid Brain Atlas (`plotting`), data loaders and the
-METASPACE pull (`io`), and the MSI dataframe <-> AnnData bridge (`data`).
+functions recycled from the Lipid Brain Atlas (`plotting`), and the MSI dataframe
+<-> AnnData bridge (`data`).
 
 Everything here is meant to be read: it is transparent, documented, and short.
 Where a function wraps something students should understand, the notebook unrolls

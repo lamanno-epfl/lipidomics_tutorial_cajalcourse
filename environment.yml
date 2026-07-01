@@ -35,7 +35,8 @@ dependencies:
   - statsmodels
   - "anndata>=0.10"
   - "scanpy>=1.10"
-  - harmonypy
+  # harmonypy is NOT on conda-forge (only bioconda) -> installed via pip in requirements-extra.txt
+  # so a clean Miniforge (conda-forge only) can build this env without adding the bioconda channel.
   - leidenalg
   - python-igraph
   - openTSNE

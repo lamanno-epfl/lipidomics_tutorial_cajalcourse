@@ -208,7 +208,7 @@ lives there as a **repository** (a "repo"): one folder, tracked by git, publishe
 in setup with one command:
 
 ```bash
-git clone https://github.com/lamanno-epfl/lipidomics_tutorial_cajalcourse.git
+git clone https://github.com/lamanno-epfl/lipidomics_tutorial_cajalcourse_students.git
 ```
 
 `git clone` downloads the whole repo *and* its full history in one go. You only do it once.""")
