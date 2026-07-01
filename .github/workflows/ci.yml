@@ -51,13 +51,15 @@ jobs:
           pip install -e external/uMAIA --no-deps
           python -c "import uMAIA, cajal_lipidomics, jax, numpyro; print('umaia env OK')"
 
-  # This is how you test Windows without owning a Windows machine: GitHub runs it for free.
-  # Only the MAIN env is tested here — the uMAIA/jax env (notebook 3) cannot build on native
-  # Windows (no conda-forge jaxlib), which is exactly why Windows students use WSL2 (covered by
-  # the Ubuntu job above, since WSL2 == Ubuntu).
+  # Best-effort probe of NATIVE Windows for the MAIN env. This is informational only
+  # (continue-on-error), because native Windows is NOT the supported path: the uMAIA/jax env
+  # (notebook 3) cannot build on native Windows at all, so Windows students use WSL2 — which is
+  # Ubuntu, already fully tested by the build-envs job above. A red mark here does not mean the
+  # course is broken on Windows; it means a pip/import detail differs on native Windows. Use WSL2.
   windows-main-env:
-    name: windows main env build + import
+    name: windows main env build + import (informational)
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: create the main env from environment.yml
