@@ -50,3 +50,23 @@ jobs:
           git clone --depth 1 https://github.com/lamanno-epfl/uMAIA.git external/uMAIA
           pip install -e external/uMAIA --no-deps
           python -c "import uMAIA, cajal_lipidomics, jax, numpyro; print('umaia env OK')"
+
+  # This is how you test Windows without owning a Windows machine: GitHub runs it for free.
+  # Only the MAIN env is tested here — the uMAIA/jax env (notebook 3) cannot build on native
+  # Windows (no conda-forge jaxlib), which is exactly why Windows students use WSL2 (covered by
+  # the Ubuntu job above, since WSL2 == Ubuntu).
+  windows-main-env:
+    name: windows main env build + import
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: create the main env from environment.yml
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment.yml
+          cache-environment: true
+      - name: install helper + import everything the notebooks use
+        shell: bash -el {0}
+        run: |
+          pip install -e .
+          python -c "import scanpy, anndata, xgboost, seaborn, harmonypy, leidenalg, igraph, openTSNE, umap, statsmodels, rdkit, shap, goatools, metaspace, pyarrow, cajal_lipidomics; from anndata import AnnData; import numpy as np; AnnData(np.zeros((2,2))); print('windows main env OK')"
