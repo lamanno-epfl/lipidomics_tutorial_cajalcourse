@@ -368,9 +368,10 @@ def mosaic(adata, lipizone_color_key="lipizone_color", section_key="SectionID", 
 
 
 def highlight_lipizone(adata, lipizone, key="lipizone", section_key="SectionID",
-                       x="x", y="y", point_size=4, axes=None):
-    """Highlight ONE lipizone in red over a grey cast of all tissue, per section. The way to reason
-    about a single object in spatial omics: where, exactly, does this one territory sit?"""
+                       x="x", y="y", point_size=2, axes=None):
+    """Highlight ONE lipizone in red over a faint grayscale cast of ALL lipizones (each one its own
+    grey shade, the Lipid Brain Atlas style), per section. The way to reason about a single object in
+    spatial omics: where, exactly, does this one territory sit?"""
     obs = adata.obs
     secs = sorted(obs[section_key].unique())
     if axes is None:
@@ -378,7 +379,11 @@ def highlight_lipizone(adata, lipizone, key="lipizone", section_key="SectionID",
     target = obs[key].astype(str) == str(lipizone)
     for ax, sname in zip(axes, secs):
         m = (obs[section_key] == sname).to_numpy()
-        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c="0.85", s=point_size, rasterized=True)
+        # faint grayscale rendering of every lipizone underneath: each lipizone gets its own grey shade
+        uniq = pd.unique(obs.loc[m, key].astype(str))
+        g = dict(zip(uniq, np.linspace(0.2, 0.8, len(uniq))))
+        ax.scatter(obs.loc[m, x], -obs.loc[m, y], c=obs.loc[m, key].astype(str).map(g),
+                   cmap="gray", s=point_size, alpha=0.3, rasterized=True)
         hit = m & target.to_numpy()
         ax.scatter(obs.loc[hit, x], -obs.loc[hit, y], c="red", s=point_size, rasterized=True)
         spatial_axes(ax)
