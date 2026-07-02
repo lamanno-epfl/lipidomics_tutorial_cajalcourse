@@ -39,6 +39,23 @@ def main():
         for p in glob.glob(f"notebooks/{lvl}/*_student.ipynb"):
             shutil.copy(p, f"{REL}/notebooks/{lvl}/")
 
+    # progressively RELEASED solutions (the instructor unlocks these as the course advances).
+    # Add a solution's path here to publish it into release/solutions/.
+    RELEASED_SOLUTIONS = [
+        "notebooks/00_intro/00_tooling.ipynb",
+        "notebooks/00_intro/01_python_for_data.ipynb",
+        "notebooks/00_intro/02_concepts.ipynb",
+        "notebooks/level1/01_mass_spectra_and_data_solution.ipynb",
+    ]
+    for p in RELEASED_SOLUTIONS:
+        if os.path.exists(p):
+            sub = "00_intro" if "00_intro" in p else p.split("/")[1]
+            os.makedirs(f"{REL}/solutions/{sub}", exist_ok=True)
+            shutil.copy(p, f"{REL}/solutions/{sub}/")
+    with open(f"{REL}/solutions/README.md", "w") as fh:
+        fh.write("# Solutions\n\nWorked, executed reference notebooks the instructor releases as the "
+                 "course advances. Try the exercises in `../notebooks/` first, then compare here.\n")
+
     # the scripts students run (fetch data, build uMAIA input); NOT make_student/build_release/destyle
     os.makedirs(f"{REL}/scripts", exist_ok=True)
     for s in ["fetch_data_bundle.py", "fetch_references.py", "build_umaia_input.py", "run_umaia.py", "move_to_mnt.py"]:
