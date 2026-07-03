@@ -47,6 +47,7 @@ def main():
         "notebooks/00_intro/02_concepts.ipynb",
         "notebooks/level1/01_mass_spectra_and_data_solution.ipynb",
         "notebooks/level1/02_annotation_solution.ipynb",
+        "notebooks/level1/03_normalization_umaia_solution.ipynb",
     ]
     for p in RELEASED_SOLUTIONS:
         if os.path.exists(p):
