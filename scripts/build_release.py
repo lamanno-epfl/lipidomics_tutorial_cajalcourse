@@ -39,16 +39,12 @@ def main():
         for p in glob.glob(f"notebooks/{lvl}/*_student.ipynb"):
             shutil.copy(p, f"{REL}/notebooks/{lvl}/")
 
-    # progressively RELEASED solutions (the instructor unlocks these as the course advances).
-    # Add a solution's path here to publish it into release/solutions/.
-    RELEASED_SOLUTIONS = [
-        "notebooks/00_intro/00_tooling.ipynb",
-        "notebooks/00_intro/01_python_for_data.ipynb",
-        "notebooks/00_intro/02_concepts.ipynb",
-        "notebooks/level1/01_mass_spectra_and_data_solution.ipynb",
-        "notebooks/level1/02_annotation_solution.ipynb",
-        "notebooks/level1/03_normalization_umaia_solution.ipynb",
-    ]
+    # RELEASED solutions. The course is over, so all solutions are published: the intro notebooks
+    # plus every level solution. (To release progressively instead, list specific paths here.)
+    RELEASED_SOLUTIONS = sorted(glob.glob("notebooks/00_intro/*.ipynb")) + \
+        sorted(glob.glob("notebooks/level1/*_solution.ipynb")) + \
+        sorted(glob.glob("notebooks/level2/*_solution.ipynb")) + \
+        sorted(glob.glob("notebooks/level3/*_solution.ipynb"))
     for p in RELEASED_SOLUTIONS:
         if os.path.exists(p):
             sub = "00_intro" if "00_intro" in p else p.split("/")[1]
